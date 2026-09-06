@@ -1,0 +1,146 @@
+# Pluggit Avent P / P300 / P450 — Relaissteuerung über J8
+#
+# Potentialfreie Kontakte (Handbuch):
+#   Stufe 1: J8-3 (grün) mit J8-2 (braun) verbinden
+#   Stufe 2: nichts verbunden (Standard)
+#   Stufe 3: J8-3 (grün) mit J8-4 (gelb) verbinden
+#
+# Hardware: ESP32-DevKit + 2-Kanal-Relais (potentialfrei, NO)
+# Relais 1 (Stufe 1): COM → J8-3, NO → J8-2
+# Relais 2 (Stufe 3): COM → J8-3, NO → J8-4
+#
+# Wichtig: Relais müssen galvanisch getrennt sein (kein gemeinsames
+# 230-V-Potential mit der KWL). Die J8-Eingänge der Avent P sind
+# potentialfreie Steuereingänge.
+
+substitutions:
+  device_name: pluggit-avent
+  friendly_name: Pluggit Avent P
+  mqtt_prefix: pluggit_avent
+  gpio_relay_stage1: GPIO18
+  gpio_relay_stage3: GPIO19
+  gpio_status_led: GPIO2
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: Pluggit Avent P Relaissteuerung J8
+  project:
+    name: pluggit.avent_p
+    version: "1.0.0"
+  on_boot:
+    then:
+      - switch.turn_off: relay_stage1
+      - switch.turn_off: relay_stage3
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  discovery: false
+  topic_prefix: ${mqtt_prefix}
+  birth_message:
+    topic: ${mqtt_prefix}/availability
+    payload: online
+  will_message:
+    topic: ${mqtt_prefix}/availability
+    payload: offline
+  on_message:
+    - topic: ${mqtt_prefix}/speed/set
+      then:
+        - lambda: |-
+            int stage = atoi(x.c_str());
+            if (stage == 1) {
+              id(relay_stage1).turn_on();
+              id(relay_stage3).turn_off();
+            } else if (stage == 3) {
+              id(relay_stage1).turn_off();
+              id(relay_stage3).turn_on();
+            } else {
+              id(relay_stage1).turn_off();
+              id(relay_stage3).turn_off();
+            }
+
+status_led:
+  pin:
+    number: ${gpio_status_led}
+    inverted: true
+
+switch:
+  - platform: gpio
+    id: relay_stage1
+    pin: ${gpio_relay_stage1}
+    restore_mode: ALWAYS_OFF
+    interlock: [relay_stage3]
+    interlock_wait_time: 250ms
+    internal: true
+
+  - platform: gpio
+    id: relay_stage3
+    pin: ${gpio_relay_stage3}
+    restore_mode: ALWAYS_OFF
+    interlock: [relay_stage1]
+    interlock_wait_time: 250ms
+    internal: true
+
+output:
+  - platform: template
+    id: fan_output
+    type: float
+    write_action:
+      - lambda: |-
+          if (state < 0.40) {
+            id(relay_stage1).turn_on();
+            id(relay_stage3).turn_off();
+          } else if (state < 0.80) {
+            id(relay_stage1).turn_off();
+            id(relay_stage3).turn_off();
+          } else {
+            id(relay_stage1).turn_off();
+            id(relay_stage3).turn_on();
+          }
+
+fan:
+  - platform: speed
+    id: kwl_fan
+    name: "Lüftung"
+    output: fan_output
+    speed_count: 3
+    restore_mode: RESTORE_DEFAULT_ON
+
+interval:
+  - interval: 5s
+    then:
+      - mqtt.publish:
+          topic: ${mqtt_prefix}/speed
+          payload: !lambda |-
+            if (id(relay_stage1).state) return "1";
+            if (id(relay_stage3).state) return "3";
+            return "2";
+          retain: true
+

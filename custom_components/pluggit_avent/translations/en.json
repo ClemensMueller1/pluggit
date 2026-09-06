@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pluggit Avent P",
+        "description": "How is the ventilation unit connected?",
+        "data": {
+          "mode": "Connection type",
+          "device_name": "Name"
+        }
+      },
+      "relay": {
+        "title": "Relay / contact control",
+        "description": "Select the two potential-free switches wired to J8. Stage 2 is both off. Never switch both on at the same time.",
+        "data": {
+          "switch_stage1": "Switch for stage 1 (J8-3 to J8-2)",
+          "switch_stage3": "Switch for stage 3 (J8-3 to J8-4)"
+        }
+      },
+      "analog": {
+        "title": "Analog 0-10 V control",
+        "description": "Select the number entity that outputs the analog voltage on J8-7 (+) / J8-8 (-). 3 V = stage 1, 6 V = stage 2, 9 V = stage 3, 0 V = remote control.",
+        "data": {
+          "analog_entity": "Voltage output (0-10 V)"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT / ESPHome gateway",
+        "description": "Topic prefix used by the ESPHome firmware (without trailing slash).",
+        "data": {
+          "mqtt_prefix": "MQTT topic prefix"
+        }
+      }
+    },
+    "error": {
+      "same_switches": "Stage 1 and stage 3 must use different switches.",
+      "mqtt_not_ready": "The MQTT integration is not set up."
+    },
+    "abort": {
+      "already_configured": "This device is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pluggit Avent P options",
+        "data": {
+          "device_name": "Name",
+          "switch_stage1": "Switch for stage 1",
+          "switch_stage3": "Switch for stage 3",
+          "analog_entity": "Voltage output (0-10 V)",
+          "mqtt_prefix": "MQTT topic prefix"
+        }
+      }
+    }
+  },
+  "entity": {
+    "fan": {
+      "ventilation": {
+        "name": "Ventilation",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "Stufe 1": "Stage 1",
+              "Stufe 2": "Stage 2",
+              "Stufe 3": "Stage 3",
+              "Fernbedienung": "Remote"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "t1": { "name": "Outdoor air T1" },
+      "t2": { "name": "Supply air T2" },
+      "t3": { "name": "Extract air T3" },
+      "t4": { "name": "Exhaust air T4" },
+      "humidity": { "name": "Extract humidity" },
+      "stage": { "name": "Fan stage" }
+    },
+    "binary_sensor": {
+      "filter_alarm": { "name": "Filter alarm" },
+      "fault": { "name": "Fault" },
+      "bypass": { "name": "Summer bypass" },
+      "interlock_fault": { "name": "Relay interlock fault" }
+    }
+  }
+}

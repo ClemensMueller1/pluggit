@@ -1,0 +1,147 @@
+# Home-Assistant-Paket für 2× Shelly 1 Mini (potentialfrei) an J8.
+# Nach custom_components/pluggit_avent die Integration über die UI
+# anlegen und die beiden Switch-Entitäten auswählen.
+# Dieses Paket ist nur die Vorlage, falls du ohne Custom Component
+# mit einem Template-Fan arbeiten willst.
+#
+# 1. Datei nach config/packages/ kopieren (packages in configuration.yaml
+#    aktivieren) oder den Inhalt nach configuration.yaml übernehmen.
+# 2. Entity-IDs der beiden Shellys anpassen.
+
+input_select:
+  pluggit_avent_stage:
+    name: Pluggit Avent Stufe
+    options:
+      - "Stufe 1"
+      - "Stufe 2"
+      - "Stufe 3"
+    initial: "Stufe 2"
+    icon: mdi:fan
+
+automation:
+  - id: pluggit_avent_apply_stage
+    alias: Pluggit Avent Stufe an Relais
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_select.pluggit_avent_stage
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id:
+            - switch.shelly_stufe1
+            - switch.shelly_stufe3
+      - delay:
+          milliseconds: 250
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.pluggit_avent_stage
+                state: "Stufe 1"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.shelly_stufe1
+          - conditions:
+              - condition: state
+                entity_id: input_select.pluggit_avent_stage
+                state: "Stufe 3"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.shelly_stufe3
+
+  - id: pluggit_avent_sync_from_relays
+    alias: Pluggit Avent Relais → Stufe
+    trigger:
+      - platform: state
+        entity_id:
+          - switch.shelly_stufe1
+          - switch.shelly_stufe3
+    action:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: switch.shelly_stufe1
+                state: "on"
+              - condition: state
+                entity_id: switch.shelly_stufe3
+                state: "off"
+            sequence:
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.pluggit_avent_stage
+                data:
+                  option: "Stufe 1"
+          - conditions:
+              - condition: state
+                entity_id: switch.shelly_stufe1
+                state: "off"
+              - condition: state
+                entity_id: switch.shelly_stufe3
+                state: "on"
+            sequence:
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.pluggit_avent_stage
+                data:
+                  option: "Stufe 3"
+          - conditions:
+              - condition: state
+                entity_id: switch.shelly_stufe1
+                state: "off"
+              - condition: state
+                entity_id: switch.shelly_stufe3
+                state: "off"
+            sequence:
+              - service: input_select.select_option
+                target:
+                  entity_id: input_select.pluggit_avent_stage
+                data:
+                  option: "Stufe 2"
+
+fan:
+  - platform: template
+    fans:
+      pluggit_avent:
+        friendly_name: "Pluggit Avent P"
+        unique_id: pluggit_avent_template_fan
+        speed_count: 3
+        preset_modes:
+          - "Stufe 1"
+          - "Stufe 2"
+          - "Stufe 3"
+        value_template: "on"
+        percentage_template: >-
+          {% set s = states('input_select.pluggit_avent_stage') %}
+          {% if s == 'Stufe 1' %}33
+          {% elif s == 'Stufe 3' %}100
+          {% else %}66{% endif %}
+        preset_mode_template: "{{ states('input_select.pluggit_avent_stage') }}"
+        turn_on:
+          service: input_select.select_option
+          target:
+            entity_id: input_select.pluggit_avent_stage
+          data:
+            option: "Stufe 2"
+        turn_off:
+          service: input_select.select_option
+          target:
+            entity_id: input_select.pluggit_avent_stage
+          data:
+            option: "Stufe 1"
+        set_percentage:
+          service: input_select.select_option
+          target:
+            entity_id: input_select.pluggit_avent_stage
+          data:
+            option: >-
+              {% if percentage | int <= 50 %}Stufe 1
+              {% elif percentage | int <= 83 %}Stufe 2
+              {% else %}Stufe 3{% endif %}
+        set_preset_mode:
+          service: input_select.select_option
+          target:
+            entity_id: input_select.pluggit_avent_stage
+          data:
+            option: "{{ preset_mode }}"

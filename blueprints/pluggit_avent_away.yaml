@@ -1,0 +1,68 @@
+blueprint:
+  name: Pluggit Avent — Abwesenheit
+  description: >
+    Bei Abwesenheit (Personen-Tracker oder Alarm-Status) auf Stufe 1
+    (Mindestlüftung / Feuchteschutz), bei Anwesenheit zurück auf Stufe 2.
+  domain: automation
+  author: pluggit_avent
+  input:
+    occupancy:
+      name: Anwesenheit
+      description: binary_sensor, der bei Anwesenheit „on“ ist.
+      selector:
+        entity:
+          domain: binary_sensor
+    fan:
+      name: Pluggit-Lüfter
+      selector:
+        entity:
+          domain: fan
+    away_preset:
+      name: Stufe abwesend
+      default: "Stufe 1"
+      selector:
+        select:
+          options:
+            - "Stufe 1"
+            - "Stufe 2"
+    home_preset:
+      name: Stufe anwesend
+      default: "Stufe 2"
+      selector:
+        select:
+          options:
+            - "Stufe 1"
+            - "Stufe 2"
+            - "Stufe 3"
+
+mode: queued
+
+trigger:
+  - platform: state
+    entity_id: !input occupancy
+    to:
+      - "on"
+      - "off"
+
+action:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy
+            state: "off"
+        sequence:
+          - service: fan.set_preset_mode
+            target:
+              entity_id: !input fan
+            data:
+              preset_mode: !input away_preset
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy
+            state: "on"
+        sequence:
+          - service: fan.set_preset_mode
+            target:
+              entity_id: !input fan
+            data:
+              preset_mode: !input home_preset

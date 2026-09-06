@@ -1,0 +1,17 @@
+set_stage:
+  name: Lüfterstufe setzen
+  description: Setzt die Lüfterstufe der Pluggit Avent P.
+  target:
+    entity:
+      integration: pluggit_avent
+      domain: fan
+  fields:
+    stage:
+      name: Stufe
+      description: 1 = Mindestlüftung, 2 = Nennlüftung, 3 = Party, 0 = Fernbedienung (nur Analog).
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box

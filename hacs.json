@@ -1,0 +1,8 @@
+{
+  "name": "Pluggit Avent P",
+  "render_readme": true,
+  "homeassistant": "2024.8.0",
+  "zip_release": false,
+  "filename": "pluggit_avent.zip",
+  "hide_default_branch": false
+}

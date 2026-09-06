@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "fan": {
+      "ventilation": {
+        "default": "mdi:fan"
+      }
+    }
+  }
+}

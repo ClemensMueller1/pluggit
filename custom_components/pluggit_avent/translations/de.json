@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Pluggit Avent P",
+        "description": "Wie ist die Lüftungsanlage angebunden?",
+        "data": {
+          "mode": "Anbindungsart",
+          "device_name": "Name"
+        }
+      },
+      "relay": {
+        "title": "Relais- / Kontaktsteuerung",
+        "description": "Wähle die zwei potentialfreien Schalter an J8. Stufe 2 = beide aus. Niemals beide gleichzeitig einschalten.",
+        "data": {
+          "switch_stage1": "Schalter Stufe 1 (J8-3 nach J8-2)",
+          "switch_stage3": "Schalter Stufe 3 (J8-3 nach J8-4)"
+        }
+      },
+      "analog": {
+        "title": "Analoge 0-10-V-Steuerung",
+        "description": "Wähle die Number-Entität, die die Analogspannung auf J8-7 (+) / J8-8 (−) ausgibt. 3 V = Stufe 1, 6 V = Stufe 2, 9 V = Stufe 3, 0 V = Fernbedienung.",
+        "data": {
+          "analog_entity": "Spannungsausgang (0-10 V)"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT- / ESPHome-Gateway",
+        "description": "Topic-Präfix der ESPHome-Firmware (ohne Schrägstrich am Ende).",
+        "data": {
+          "mqtt_prefix": "MQTT-Topic-Präfix"
+        }
+      }
+    },
+    "error": {
+      "same_switches": "Stufe 1 und Stufe 3 müssen unterschiedliche Schalter verwenden.",
+      "mqtt_not_ready": "Die MQTT-Integration ist nicht eingerichtet."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Pluggit Avent P Optionen",
+        "data": {
+          "device_name": "Name",
+          "switch_stage1": "Schalter Stufe 1",
+          "switch_stage3": "Schalter Stufe 3",
+          "analog_entity": "Spannungsausgang (0-10 V)",
+          "mqtt_prefix": "MQTT-Topic-Präfix"
+        }
+      }
+    }
+  },
+  "entity": {
+    "fan": {
+      "ventilation": {
+        "name": "Lüftung",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "Stufe 1": "Stufe 1",
+              "Stufe 2": "Stufe 2",
+              "Stufe 3": "Stufe 3",
+              "Fernbedienung": "Fernbedienung"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "t1": { "name": "Außenluft T1" },
+      "t2": { "name": "Zuluft T2" },
+      "t3": { "name": "Abluft T3" },
+      "t4": { "name": "Fortluft T4" },
+      "humidity": { "name": "Abluftfeuchte" },
+      "stage": { "name": "Lüfterstufe" }
+    },
+    "binary_sensor": {
+      "filter_alarm": { "name": "Filteralarm" },
+      "fault": { "name": "Störung" },
+      "bypass": { "name": "Sommerbypass" },
+      "interlock_fault": { "name": "Relais-Verriegelungsfehler" }
+    }
+  }
+}

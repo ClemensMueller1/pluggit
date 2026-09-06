@@ -1,0 +1,76 @@
+blueprint:
+  name: Pluggit Avent — Feuchte-Boost
+  description: >
+    Schaltet die KWL auf Stufe 3, sobald die Luftfeuchte über einem Schwellwert
+    liegt (Bad, Küche, Wäsche), und nach einer Nachlaufzeit zurück auf Stufe 2.
+  domain: automation
+  author: pluggit_avent
+  input:
+    humidity_sensor:
+      name: Feuchtesensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+    fan:
+      name: Pluggit-Lüfter
+      selector:
+        entity:
+          domain: fan
+    threshold:
+      name: Schwellwert (% rF)
+      default: 60
+      selector:
+        number:
+          min: 40
+          max: 90
+          unit_of_measurement: "%"
+          mode: slider
+    boost_preset:
+      name: Boost-Stufe
+      default: "Stufe 3"
+      selector:
+        select:
+          options:
+            - "Stufe 2"
+            - "Stufe 3"
+    normal_preset:
+      name: Normal-Stufe
+      default: "Stufe 2"
+      selector:
+        select:
+          options:
+            - "Stufe 1"
+            - "Stufe 2"
+    off_delay:
+      name: Nachlauf
+      default:
+        minutes: 20
+      selector:
+        duration: {}
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: numeric_state
+    entity_id: !input humidity_sensor
+    above: !input threshold
+
+action:
+  - service: fan.set_preset_mode
+    target:
+      entity_id: !input fan
+    data:
+      preset_mode: !input boost_preset
+  - wait_for_trigger:
+      - platform: numeric_state
+        entity_id: !input humidity_sensor
+        below: !input threshold
+    timeout: "02:00:00"
+  - delay: !input off_delay
+  - service: fan.set_preset_mode
+    target:
+      entity_id: !input fan
+    data:
+      preset_mode: !input normal_preset

@@ -1,0 +1,44 @@
+title: Lüftung
+views:
+  - title: Pluggit Avent P
+    path: pluggit
+    icon: mdi:air-filter
+    cards:
+      - type: thermostat
+        entity: fan.pluggit_avent_p
+        name: Lüftung
+      - type: entities
+        title: Stufen
+        entities:
+          - entity: fan.pluggit_avent_p
+            name: Lüfter
+          - entity: sensor.pluggit_avent_p_lufterstufe
+            name: Aktuelle Stufe
+      - type: glance
+        title: Temperaturen (nur MQTT/UART)
+        entities:
+          - entity: sensor.pluggit_avent_p_aussenluft_t1
+            name: T1 Außen
+          - entity: sensor.pluggit_avent_p_zuluft_t2
+            name: T2 Zuluft
+          - entity: sensor.pluggit_avent_p_abluft_t3
+            name: T3 Abluft
+          - entity: sensor.pluggit_avent_p_fortluft_t4
+            name: T4 Fortluft
+      - type: entities
+        title: Alarme
+        entities:
+          - entity: binary_sensor.pluggit_avent_p_filteralarm
+          - entity: binary_sensor.pluggit_avent_p_storung
+          - entity: binary_sensor.pluggit_avent_p_sommerbypass
+          - entity: binary_sensor.pluggit_avent_p_relais_verriegelungsfehler
+      - type: markdown
+        content: >
+          **Stufe 1** Mindestlüftung / Abwesenheit
+
+          **Stufe 2** Nennlüftung
+
+          **Stufe 3** Party / Feuchte-Boost
+
+          Relaisbetrieb kann die Anlage nicht auf Standby (Stufe 0) setzen.
+          Analog 0 V gibt die Kontrolle an die Original-Fernbedienung zurück.
