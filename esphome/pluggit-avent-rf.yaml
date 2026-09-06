@@ -3,16 +3,13 @@
 # Die Original-Fernbedienung DTH-029255-04 nutzt einen Nordic nRF905
 # auf 868,4 MHz (KNX-User-Forum, Beitrag #218).
 #
-# Diese Firmware ist der Einstieg: sie sniffed Pakete, damit die
-# Geräteadresse der eigenen Fernbedienung ermittelt werden kann.
-# Senden (Replay) erst nach erfolgreichem Sniff — sonst stört man
-# die Pairing-Adresse nicht.
+# Diese Firmware sniffed Pakete, damit die Geräteadresse der eigenen
+# Fernbedienung ermittelt werden kann. Replay über
+# nrf905_pluggit.transmit erst nach erfolgreichem Sniff.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
 #   nRF905-Modul 868 MHz (PTR8000+ / NF905SE, SMA-Antenne)
-#   Amazon: "Hailege NRF905 Wireless Transceiver Modul PTR8000+"
-#   Botland: nRF905 433/868/915 MHz THT-Transceiver
 #
 # SPI-Verdrahtung ESP32 → nRF905:
 #   3V3  → VCC     (niemals 5 V)
@@ -20,40 +17,47 @@
 #   GPIO23 MOSI → MOSI / SI
 #   GPIO19 MISO → MISO / SO
 #   GPIO18 SCK  → SCK
-#   GPIO5  CS   → CSN
+#   GPIO21 CS   → CSN   (nicht GPIO5: Strapping-Pin)
 #   GPIO4  → CE
 #   GPIO16 → TXE
 #   GPIO17 → PWR
-#   GPIO15 → DR (Data Ready)
-#   GPIO2  → CD (Carrier Detect, optional)
+#   GPIO22 → DR (Data Ready, nicht GPIO15: Strapping-Pin)
 #
-# Nach dem Flashen: ESPHome-Log öffnen, Taste an der Original-
-# Fernbedienung drücken, 32-Byte-Payload notieren. Die ersten
-# Bytes sind die Geräteadresse.
+# ESPHome 2026.3+: custom_component ist entfernt. Die Komponente liegt
+# als External Component in ./components/nrf905_pluggit/.
+# Den Ordner components/ mit ins ESPHome-Config-Verzeichnis kopieren
+# (neben diese YAML), oder die GitHub-Quelle unten verwenden.
+#
+# Nach dem Flashen: Log öffnen, Taste an der Original-FB drücken,
+# 32-Byte-Payload notieren. Die ersten Bytes sind die Geräteadresse.
 
 substitutions:
   device_name: pluggit-avent-rf
   friendly_name: Pluggit Avent P RF
   mqtt_prefix: pluggit_avent
-  nrf_cs: GPIO5
-  nrf_ce: GPIO4
-  nrf_txe: GPIO16
-  nrf_pwr: GPIO17
-  nrf_dr: GPIO15
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
-  includes:
-    - nrf905_pluggit.h
-  libraries:
-    - SPI
+  project:
+    name: pluggit.avent_p_rf
+    version: "1.1.0"
 
 esp32:
   board: esp32dev
   framework:
     type: arduino
+
+# Lokal (YAML und components/ im selben Ordner) oder vom GitHub-Repo.
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [nrf905_pluggit]
+  # Alternative, wenn nur die YAML in HA liegt:
+  # - source: github://ClemensMueller1/pluggit@main
+  #   components: [nrf905_pluggit]
 
 logger:
   level: DEBUG
@@ -92,21 +96,28 @@ spi:
   mosi_pin: GPIO23
   miso_pin: GPIO19
 
-custom_component:
-  - lambda: |-
-      auto nrf = new PluggitNrf905(
-          ${nrf_cs}, ${nrf_ce}, ${nrf_txe}, ${nrf_pwr}, ${nrf_dr});
-      App.register_component(nrf);
-      return {nrf};
-
-text_sensor:
-  - platform: template
+nrf905_pluggit:
+  id: nrf
+  cs_pin: GPIO21
+  ce_pin: GPIO4
+  txe_pin: GPIO16
+  pwr_pin: GPIO17
+  dr_pin: GPIO22
+  last_packet:
+    id: nrf_last_packet
     name: "Letztes Funkpaket"
-    id: last_packet
-    icon: mdi:radio-tower
-
-binary_sensor:
-  - platform: template
+  rf_rx:
     name: "Funkempfang"
-    id: rf_rx
-    device_class: connectivity
+  on_packet:
+    - mqtt.publish:
+        topic: ${mqtt_prefix}/rf/rx
+        payload: !lambda "return x;"
+
+button:
+  - platform: template
+    name: "RF Replay (letztes Paket)"
+    icon: mdi:remote
+    on_press:
+      - nrf905_pluggit.transmit:
+          id: nrf
+          data: !lambda "return id(nrf_last_packet).state;"

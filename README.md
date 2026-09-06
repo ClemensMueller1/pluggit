@@ -83,10 +83,13 @@ Vorlagen in `esphome/`. `secrets.yaml.example` nach `secrets.yaml` kopieren.
 | `pluggit-avent-relais.yaml` | ESP32 + 2 Relais an J8 |
 | `pluggit-avent-analog.yaml` | ESP32 + PWM-0–10-V-Wandler an J8-7/8 |
 | `pluggit-avent-uart.yaml` | ESP32 3,3 V UART 4800 Baud an der Hauptplatine |
-| `pluggit-avent-rf.yaml` | nRF905-Sniffer (experimentell) |
+| `pluggit-avent-rf.yaml` | nRF905-Sniffer (External Component, ESPHome 2026.3+) |
 
-Funk-Replay ohne ESPHome-Custom-Component:
-`firmware/nrf905_sniffer.ino`.
+Funk-Firmware: `esphome/pluggit-avent-rf.yaml` plus
+`esphome/components/nrf905_pluggit/` (kein `custom_component` mehr).
+Den Ordner `components/` neben die YAML ins ESPHome-Config-Verzeichnis
+legen, oder in der YAML auf `github://ClemensMueller1/pluggit@main`
+umstellen. Arduino-Sniffer ohne ESPHome: `firmware/nrf905_sniffer.ino`.
 
 Die UART-Firmware spricht das interne Modbus der P300
 (4800 8N1, **nur 3,3 V**, Funkmodul-Software 03.08.01).

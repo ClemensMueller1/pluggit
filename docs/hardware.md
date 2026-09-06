@@ -110,8 +110,9 @@ Die Original-FB sendet auf **868,4 MHz** mit Nordic **nRF905**
 | 1 | ESP32-DevKit | s. oben | 8 € |
 | 1 | **nRF905-Modul 868 MHz** mit SMA-Antenne (PTR8000+ / NF905SE) | [Amazon Hailege NRF905](https://www.amazon.de/NRF905-Funksender-PTR8000-Antenne-NF905SE/dp/B07XYYQLKD) · [Botland](https://botland.de/funkmodule/2747-nrf905-433868915mhz-funkmodul-tht-transceiver-mit-antenne-5903351242608.html) | 7–10 € |
 
-Firmware: `firmware/nrf905_sniffer.ino` (Sniff + Replay).
-ESPHome-Gerüst: `esphome/pluggit-avent-rf.yaml` (experimentell).
+Firmware: `esphome/pluggit-avent-rf.yaml` plus External Component
+`esphome/components/nrf905_pluggit/` (ESPHome 2026.3+, kein custom_component).
+Arduino-Variante: `firmware/nrf905_sniffer.ino`.
 
 Zuerst sniffen, Geräteadresse der eigenen Fernbedienung notieren, dann
 gezielt Replay. Das Pairing der Original-FB bleibt erhalten, solange du

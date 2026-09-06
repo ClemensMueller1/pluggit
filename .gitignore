@@ -1,4 +1,5 @@
 esphome/secrets.yaml
+esphome/.esphome/
 .idea/
 .vscode/
 __pycache__/
