@@ -1,4 +1,4 @@
-# Pluggit Avent P für Home Assistant
+# ACHTUNG: VOLLKOMMEN UNGETESTET...Pluggit Avent P für Home Assistant
 
 Steuert die **Pluggit Avent P** (P300 / P300N / P450) mit der grauen
 Funk-Fernbedienung **DTH-029255-04**. Die Anlage hat kein LAN — die
