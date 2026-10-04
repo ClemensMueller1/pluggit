@@ -7,10 +7,21 @@ Quellen: Betriebsanleitung 2011, KNX-User-Forum Thread
 
 - Chip: Nordic **nRF905**
 - Frequenz: **868,4 MHz**
-- Modulation: GFSK / ShockBurst
-- Payload: 32 Byte
-- Reichweite laut Handbuch: ca. 30 m durch Wände
+  (`CH_NO=0x76`, `HFREQ_PLL=1` → Config-Byte 1 = **0x0E**, nicht 0x0C.
+  0x0C ist 434,2 MHz.)
+- Modulation: GFSK / ShockBurst, 50 kBd
+- Payload: 32 Byte, CRC-16, 16-MHz-Quarz
+- ShockBurst-Adresse: **`00 00 xx xx`** (nicht Nordic-Default `E7 E7 E7 E7`).
+  Die letzten zwei Bytes stehen in den Modbus-Registern 5 und 6 der
+  Anlage (KNX-User-Forum #218, Beispiel `0A 7A` → Adresse `00 00 0A 7A`).
+- Reichweite laut Handbuch: ca. 30 m. Billige PTR8000-Module oft nur
+  **~20 cm**, bis ein 868-MHz-optimiertes Modul da ist.
 - Die FB sendet nur nach Tastendruck (kein Dauerfunk, Sleep nach 2 min)
+
+Die ESPHome-Komponente startet im Sniff-Modus (1-Byte-Adresse `0x00`,
+CRC aus), erkennt Pluggit-Rahmen am Prefix `00 00` plus Payload `90` /
+`80` / `88`, sperrt dann die gelernte 4-Byte-Adresse und schaltet auf
+CRC-16. Danach Taste erneut drücken für ein vollständiges 32-Byte-Paket.
 
 Beispiel-Sniff (Forum):
 
@@ -19,9 +30,9 @@ FB : 90800304 00000CDB F9FB3FE1 E9CAEF69 5FBFFFE3 FD9FFFDE BF6D3F1D B7257F69
 KWL: 80900318 02100815 0C0A7A00 00000000 00041610 07101207 504C0000 FFFFFFFF
 ```
 
-Die Geräteadresse ist in den ersten Bytes und wird beim Pairing
-festgeschrieben. Eine zweite FB muss an die bestehende Platine
-angelernt werden (Handbuch: „zusätzliche Fernbedienung“).
+`90…` kommt von der Fernbedienung, `80…` von der Anlage. Eine zweite FB
+muss an die bestehende Platine angelernt werden (Handbuch:
+„zusätzliche Fernbedienung“).
 
 ## UART Funkmodul ↔ Hauptplatine
 

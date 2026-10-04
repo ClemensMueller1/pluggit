@@ -5,12 +5,17 @@
  * MQTT: veröffentlicht jedes empfangene 32-Byte-Paket und
  * akzeptiert Replay-Payloads auf pluggit_avent/rf/tx
  *
- * SPI: SCK=18 MOSI=23 MISO=19 CSN=5 CE=4 TXE=16 PWR=17 DR=15
+ * SPI: SCK=18 MOSI=23 MISO=19 CSN=21 CE=4 TXE=16 PWR=17 DR=22
+ *
+ * Config: 868.4 MHz (HFREQ_PLL=1 → Byte1 0x0E, nicht 0x0C).
+ * Boot im Sniff (1-Byte-Adresse 0x00, CRC aus). Pluggit-Adresse ist
+ * 00 00 xx xx. Nach dem ersten Treffer Lock auf CRC-16.
  */
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <SPI.h>
+#include <string.h>
 
 const char *WIFI_SSID = "DeinWLAN";
 const char *WIFI_PASS = "wlan-passwort";
@@ -21,44 +26,97 @@ const char *MQTT_RX = "pluggit_avent/rf/rx";
 const char *MQTT_TX = "pluggit_avent/rf/tx";
 const char *MQTT_AVAIL = "pluggit_avent/availability";
 
-const uint8_t PIN_CS = 5;
+const uint8_t PIN_CS = 21;
 const uint8_t PIN_CE = 4;
 const uint8_t PIN_TXE = 16;
 const uint8_t PIN_PWR = 17;
-const uint8_t PIN_DR = 15;
+const uint8_t PIN_DR = 22;
 
 WiFiClient wifi;
 PubSubClient mqtt(wifi);
 
 static const uint8_t NRF_WC = 0x00;
+static const uint8_t NRF_RC = 0x10;
 static const uint8_t NRF_WTP = 0x20;
+static const uint8_t NRF_WTA = 0x22;
 static const uint8_t NRF_RRP = 0x24;
+
+bool sniffMode = true;
+uint8_t listenAddr[4] = {0x00, 0x00, 0x00, 0x00};
 
 void nrfSelect() { digitalWrite(PIN_CS, LOW); }
 void nrfDeselect() { digitalWrite(PIN_CS, HIGH); }
 
+void nrfStandby() {
+  digitalWrite(PIN_CE, LOW);
+  digitalWrite(PIN_TXE, LOW);
+  delay(1);
+}
+
 void nrfConfig() {
-  uint8_t cfg[] = {0x76, 0x0C, 0x44, 0x20, 0x20, 0xE7, 0xE7, 0xE7, 0xE7, 0xD8};
+  // 0x0E: PA +10 dBm, HFREQ_PLL=1 → 868.4 MHz (0x0C wäre 434.2 MHz)
+  uint8_t cfg[10] = {0x76, 0x0E, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8};
+  if (sniffMode) {
+    cfg[2] = 0x41;  // RX address width 1
+    cfg[5] = 0x00;
+    cfg[9] = 0x18;  // CRC off, 16 MHz
+  } else {
+    memcpy(cfg + 5, listenAddr, 4);
+  }
+  nrfStandby();
   nrfSelect();
   SPI.transfer(NRF_WC);
   for (uint8_t b : cfg) SPI.transfer(b);
   nrfDeselect();
 }
 
+bool nrfVerify() {
+  uint8_t got[10];
+  nrfStandby();
+  nrfSelect();
+  SPI.transfer(NRF_RC);
+  for (int i = 0; i < 10; i++) got[i] = SPI.transfer(0);
+  nrfDeselect();
+  Serial.print("CFG ");
+  for (int i = 0; i < 10; i++) {
+    Serial.printf("%02X ", got[i]);
+  }
+  Serial.println();
+  bool dead = true;
+  for (int i = 0; i < 10; i++) {
+    if (got[i] != 0x00 && got[i] != 0xFF) dead = false;
+  }
+  return !dead;
+}
+
 void nrfRxMode() {
   digitalWrite(PIN_TXE, LOW);
   digitalWrite(PIN_CE, HIGH);
+  delay(1);
+}
+
+void nrfWriteTxAddr() {
+  nrfStandby();
+  nrfSelect();
+  SPI.transfer(NRF_WTA);
+  for (uint8_t i = 0; i < 4; i++) SPI.transfer(listenAddr[i]);
+  nrfDeselect();
 }
 
 void nrfTx(const uint8_t *payload, size_t len) {
-  digitalWrite(PIN_CE, LOW);
-  digitalWrite(PIN_TXE, HIGH);
+  if (sniffMode) {
+    Serial.println("TX skipped, address not locked");
+    return;
+  }
+  nrfStandby();
   nrfSelect();
   SPI.transfer(NRF_WTP);
   for (size_t i = 0; i < 32; i++) {
     SPI.transfer(i < len ? payload[i] : 0x00);
   }
   nrfDeselect();
+  nrfWriteTxAddr();
+  digitalWrite(PIN_TXE, HIGH);
   digitalWrite(PIN_CE, HIGH);
   delay(20);
   nrfRxMode();
@@ -105,7 +163,7 @@ void setup() {
   pinMode(PIN_CE, OUTPUT);
   pinMode(PIN_TXE, OUTPUT);
   pinMode(PIN_PWR, OUTPUT);
-  pinMode(PIN_DR, INPUT);
+  pinMode(PIN_DR, INPUT_PULLDOWN);
   digitalWrite(PIN_CS, HIGH);
   digitalWrite(PIN_CE, LOW);
   digitalWrite(PIN_TXE, LOW);
@@ -113,7 +171,12 @@ void setup() {
   delay(5);
   SPI.begin();
   nrfConfig();
+  if (!nrfVerify()) {
+    Serial.println("nRF905 SPI readback failed — check wiring");
+  }
+  nrfWriteTxAddr();
   nrfRxMode();
+  Serial.println("Sniffing 868.4 MHz, press remote within ~20 cm");
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -125,18 +188,35 @@ void setup() {
 void loop() {
   if (!mqtt.connected()) mqttConnect();
   mqtt.loop();
-  if (digitalRead(PIN_DR) == HIGH) {
-    uint8_t buf[32];
-    digitalWrite(PIN_CE, LOW);
-    nrfSelect();
-    SPI.transfer(NRF_RRP);
-    for (int i = 0; i < 32; i++) buf[i] = SPI.transfer(0);
-    nrfDeselect();
+  if (digitalRead(PIN_DR) != HIGH) return;
+
+  uint8_t buf[32];
+  nrfStandby();
+  nrfSelect();
+  SPI.transfer(NRF_RRP);
+  for (int i = 0; i < 32; i++) buf[i] = SPI.transfer(0);
+  nrfDeselect();
+  nrfRxMode();
+
+  if (sniffMode) {
+    if (!(buf[0] == 0x00 && (buf[3] == 0x90 || buf[3] == 0x80 || buf[3] == 0x88))) {
+      return;
+    }
+    listenAddr[0] = 0x00;
+    listenAddr[1] = buf[0];
+    listenAddr[2] = buf[1];
+    listenAddr[3] = buf[2];
+    sniffMode = false;
+    nrfConfig();
+    nrfWriteTxAddr();
     nrfRxMode();
-    char hex[97];
-    for (int i = 0; i < 32; i++) sprintf(hex + i * 3, "%02X ", buf[i]);
-    hex[95] = 0;
-    Serial.println(hex);
-    mqtt.publish(MQTT_RX, hex, false);
+    Serial.printf("Locked address %02X %02X %02X %02X — press remote again\n",
+                  listenAddr[0], listenAddr[1], listenAddr[2], listenAddr[3]);
   }
+
+  char hex[97];
+  for (int i = 0; i < 32; i++) sprintf(hex + i * 3, "%02X ", buf[i]);
+  hex[95] = 0;
+  Serial.println(hex);
+  mqtt.publish(MQTT_RX, hex, false);
 }

@@ -3,13 +3,16 @@
 # Die Original-Fernbedienung DTH-029255-04 nutzt einen Nordic nRF905
 # auf 868,4 MHz (KNX-User-Forum, Beitrag #218).
 #
-# Diese Firmware sniffed Pakete, damit die Geräteadresse der eigenen
-# Fernbedienung ermittelt werden kann. Replay über
-# nrf905_pluggit.transmit erst nach erfolgreichem Sniff.
+# Boot: Sniff-Modus (1-Byte-Adresse 0x00, CRC aus). Pluggit nutzt die
+# ShockBurst-Adresse 00 00 xx xx — nicht das Nordic-Default E7 E7 E7 E7.
+# Nach dem ersten gültigen Tastendruck sperrt die Firmware die gelernte
+# Adresse und schaltet auf CRC-16. Danach Taste erneut drücken für ein
+# vollständiges 32-Byte-Paket.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
 #   nRF905-Modul 868 MHz (PTR8000+ / NF905SE, SMA-Antenne)
+#   Billige 868-Module haben oft nur ~20 cm Reichweite — FB dicht halten.
 #
 # SPI-Verdrahtung ESP32 → nRF905:
 #   3V3  → VCC     (niemals 5 V)
@@ -22,14 +25,17 @@
 #   GPIO16 → TXE
 #   GPIO17 → PWR
 #   GPIO22 → DR (Data Ready, nicht GPIO15: Strapping-Pin)
+#   optional CD / AM des Moduls an freie GPIOs (Diagnose)
 #
 # ESPHome 2026.3+: custom_component ist entfernt. Die Komponente liegt
 # als External Component in ./components/nrf905_pluggit/.
 # Den Ordner components/ mit ins ESPHome-Config-Verzeichnis kopieren
 # (neben diese YAML), oder die GitHub-Quelle unten verwenden.
 #
-# Nach dem Flashen: Log öffnen, Taste an der Original-FB drücken,
-# 32-Byte-Payload notieren. Die ersten Bytes sind die Geräteadresse.
+# Nach dem Flashen: Log öffnen, Taste an der Original-FB drücken
+# (Modul ~20 cm von der FB). Sensor "Funkadresse" zeigt 00 00 xx xx.
+# Bekannte Adresse fest eintragen:
+#   rx_address: [0x00, 0x00, 0x0A, 0x7A]
 
 substitutions:
   device_name: pluggit-avent-rf
@@ -42,7 +48,7 @@ esphome:
   comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
   project:
     name: pluggit.avent_p_rf
-    version: "1.1.0"
+    version: "1.2.0"
 
 esp32:
   board: esp32dev
@@ -102,12 +108,20 @@ nrf905_pluggit:
   ce_pin: GPIO4
   txe_pin: GPIO16
   pwr_pin: GPIO17
-  dr_pin: GPIO22
+  dr_pin:
+    number: GPIO22
+    mode:
+      input: true
+      pulldown: true
   last_packet:
     id: nrf_last_packet
     name: "Letztes Funkpaket"
+  listen_address:
+    name: "Funkadresse"
   rf_rx:
     name: "Funkempfang"
+  radio_ok:
+    name: "nRF905 SPI"
   on_packet:
     - mqtt.publish:
         topic: ${mqtt_prefix}/rf/rx
@@ -121,3 +135,9 @@ button:
       - nrf905_pluggit.transmit:
           id: nrf
           data: !lambda "return id(nrf_last_packet).state;"
+  - platform: template
+    name: "RF Adresse neu lernen"
+    icon: mdi:radar
+    on_press:
+      - nrf905_pluggit.start_sniff:
+          id: nrf

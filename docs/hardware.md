@@ -114,9 +114,10 @@ Firmware: `esphome/pluggit-avent-rf.yaml` plus External Component
 `esphome/components/nrf905_pluggit/` (ESPHome 2026.3+, kein custom_component).
 Arduino-Variante: `firmware/nrf905_sniffer.ino`.
 
-Zuerst sniffen, Geräteadresse der eigenen Fernbedienung notieren, dann
-gezielt Replay. Das Pairing der Original-FB bleibt erhalten, solange du
-dieselbe Adresse verwendest.
+Zuerst sniffen (FB **dicht am Modul**, oft nur 20 cm), gelernte
+ShockBurst-Adresse `00 00 xx xx` notieren, dann gezielt Replay. Das
+Pairing der Original-FB bleibt erhalten, solange du dieselbe Adresse
+verwendest. Modul muss **868 MHz** sein (nicht 433-MHz-PTR8000).
 
 ---
 

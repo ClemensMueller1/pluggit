@@ -90,6 +90,9 @@ Funk-Firmware: `esphome/pluggit-avent-rf.yaml` plus
 Den Ordner `components/` neben die YAML ins ESPHome-Config-Verzeichnis
 legen, oder in der YAML auf `github://ClemensMueller1/pluggit@main`
 umstellen. Arduino-Sniffer ohne ESPHome: `firmware/nrf905_sniffer.ino`.
+Die Komponente startet im Sniff-Modus (868,4 MHz, Adresse `00 00 xx xx`)
+und lernt die Geräteadresse beim ersten Tastendruck. Fernbedienung beim
+Sniff dicht an das Modul halten (billige 868-MHz-Module oft nur ~20 cm).
 
 Die UART-Firmware spricht das interne Modbus der P300
 (4800 8N1, **nur 3,3 V**, Funkmodul-Software 03.08.01).

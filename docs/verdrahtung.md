@@ -118,5 +118,9 @@ zweite LED dazu.
 
 nRF905 nur mit 3,3 V. Antenne aufschrauben. ESP32 und Modul in
 Gehäuse in Sichtweite der KWL (nicht im Metallschrank).
-Sniffer-Log: Taste an der Original-FB drücken, 32-Byte-Hex notieren.
-Replay über MQTT-Topic `pluggit_avent/rf/tx`.
+Beim ersten Sniff die Fernbedienung **etwa 20 cm** vom Modul halten —
+viele 868-MHz-Module haben sehr kurze Reichweite.
+Log: `nRF905 SPI` muss an sein (sonst Verdrahtung CSN/MOSI/MISO/SCK).
+Taste drücken, Sensor **Funkadresse** zeigt `00 00 xx xx`. Danach Taste
+noch einmal für ein volles 32-Byte-Paket. Replay über den Button
+„RF Replay“ oder MQTT `pluggit_avent/rf/rx`.

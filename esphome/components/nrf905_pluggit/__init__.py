@@ -14,10 +14,15 @@ CONF_CE_PIN = "ce_pin"
 CONF_TXE_PIN = "txe_pin"
 CONF_PWR_PIN = "pwr_pin"
 CONF_DR_PIN = "dr_pin"
+CONF_CD_PIN = "cd_pin"
+CONF_AM_PIN = "am_pin"
 CONF_LAST_PACKET = "last_packet"
+CONF_LISTEN_ADDRESS = "listen_address"
 CONF_RF_RX = "rf_rx"
+CONF_RADIO_OK = "radio_ok"
 CONF_ON_PACKET = "on_packet"
 CONF_DATA = "data"
+CONF_RX_ADDRESS = "rx_address"
 
 nrf905_pluggit_ns = cg.esphome_ns.namespace("nrf905_pluggit")
 Nrf905Pluggit = nrf905_pluggit_ns.class_("Nrf905Pluggit", cg.Component, spi.SPIDevice)
@@ -25,6 +30,9 @@ Nrf905PacketTrigger = nrf905_pluggit_ns.class_(
     "Nrf905PacketTrigger", automation.Trigger.template(cg.std_string)
 )
 Nrf905TransmitAction = nrf905_pluggit_ns.class_("Nrf905TransmitAction", automation.Action)
+Nrf905StartSniffAction = nrf905_pluggit_ns.class_(
+    "Nrf905StartSniffAction", automation.Action
+)
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -34,10 +42,21 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_TXE_PIN): pins.gpio_output_pin_schema,
             cv.Required(CONF_PWR_PIN): pins.gpio_output_pin_schema,
             cv.Required(CONF_DR_PIN): pins.gpio_input_pin_schema,
+            cv.Optional(CONF_CD_PIN): pins.gpio_input_pin_schema,
+            cv.Optional(CONF_AM_PIN): pins.gpio_input_pin_schema,
+            cv.Optional(CONF_RX_ADDRESS): cv.All(
+                cv.ensure_list(cv.hex_uint8_t), cv.Length(min=4, max=4)
+            ),
             cv.Optional(CONF_LAST_PACKET): text_sensor.text_sensor_schema(
                 icon="mdi:radio-tower",
             ),
+            cv.Optional(CONF_LISTEN_ADDRESS): text_sensor.text_sensor_schema(
+                icon="mdi:identifier",
+            ),
             cv.Optional(CONF_RF_RX): binary_sensor.binary_sensor_schema(
+                device_class=DEVICE_CLASS_CONNECTIVITY,
+            ),
+            cv.Optional(CONF_RADIO_OK): binary_sensor.binary_sensor_schema(
                 device_class=DEVICE_CLASS_CONNECTIVITY,
             ),
             cv.Optional(CONF_ON_PACKET): automation.validate_automation(
@@ -62,13 +81,30 @@ async def to_code(config):
     cg.add(var.set_pwr_pin(await cg.gpio_pin_expression(config[CONF_PWR_PIN])))
     cg.add(var.set_dr_pin(await cg.gpio_pin_expression(config[CONF_DR_PIN])))
 
+    if CONF_CD_PIN in config:
+        cg.add(var.set_cd_pin(await cg.gpio_pin_expression(config[CONF_CD_PIN])))
+    if CONF_AM_PIN in config:
+        cg.add(var.set_am_pin(await cg.gpio_pin_expression(config[CONF_AM_PIN])))
+
+    if CONF_RX_ADDRESS in config:
+        addr = config[CONF_RX_ADDRESS]
+        cg.add(var.set_rx_address(addr[0], addr[1], addr[2], addr[3]))
+
     if CONF_LAST_PACKET in config:
         sens = await text_sensor.new_text_sensor(config[CONF_LAST_PACKET])
         cg.add(var.set_last_packet(sens))
 
+    if CONF_LISTEN_ADDRESS in config:
+        sens = await text_sensor.new_text_sensor(config[CONF_LISTEN_ADDRESS])
+        cg.add(var.set_listen_address(sens))
+
     if CONF_RF_RX in config:
         bin_sens = await binary_sensor.new_binary_sensor(config[CONF_RF_RX])
         cg.add(var.set_rf_rx(bin_sens))
+
+    if CONF_RADIO_OK in config:
+        bin_sens = await binary_sensor.new_binary_sensor(config[CONF_RADIO_OK])
+        cg.add(var.set_radio_ok(bin_sens))
 
     for conf in config.get(CONF_ON_PACKET, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID])
@@ -93,3 +129,14 @@ async def nrf905_transmit_to_code(config, action_id, template_arg, args):
     template_ = await cg.templatable(config[CONF_DATA], args, cg.std_string)
     cg.add(var.set_data(template_))
     return var
+
+
+@automation.register_action(
+    "nrf905_pluggit.start_sniff",
+    Nrf905StartSniffAction,
+    cv.Schema({cv.GenerateID(): cv.use_id(Nrf905Pluggit)}),
+    synchronous=True,
+)
+async def nrf905_start_sniff_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    return cg.new_Pvariable(action_id, template_arg, paren)
