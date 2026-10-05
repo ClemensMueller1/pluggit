@@ -26,15 +26,17 @@
       },
       "mqtt": {
         "title": "MQTT / ESPHome gateway",
-        "description": "Topic prefix of the ESPHome firmware. Paste the 32-byte hex frames from the nRF905 sniffer (Letztes Funkpaket / pluggit_avent/rf/rx). Packet 1 = Off, 2 = Stage 1, 3 = Stage 2, 4 = Stage 3.",
+        "description": "Topic prefix of the ESPHome firmware. ShockBurst address is 4 bytes (for example 00 00 0A 7A). Leave it empty to show the address reported by the ESP; a value saved here is sent to the ESP and stored in NVM. Paste the 32-byte hex frames from the nRF905 sniffer (Letztes Funkpaket / pluggit_avent/rf/rx). Packet 1 = Off, 2 = Stage 1, 3 = Stage 2, 4 = Stage 3.",
         "data": {
           "mqtt_prefix": "MQTT topic prefix",
+          "rf_address": "ShockBurst address",
           "rf_packet_1": "RF packet 1 (Off)",
           "rf_packet_2": "RF packet 2 (Stage 1)",
           "rf_packet_3": "RF packet 3 (Stage 2)",
           "rf_packet_4": "RF packet 4 (Stage 3)"
         },
         "data_description": {
+          "rf_address": "4-byte hex, for example 00 00 0A 7A. Empty shows the address from the ESP. A saved value is written to the ESP NVM.",
           "rf_packet_1": "32-byte hex from the sniffer, spaces optional. Sent on Off.",
           "rf_packet_2": "32-byte hex from the sniffer. Sent on Stage 1.",
           "rf_packet_3": "32-byte hex from the sniffer. Sent on Stage 2.",
@@ -45,7 +47,8 @@
     "error": {
       "same_switches": "Stage 1 and stage 3 must use different switches.",
       "mqtt_not_ready": "The MQTT integration is not set up.",
-      "invalid_rf_packet": "Each RF packet must be empty or exactly 32 bytes (64 hex digits)."
+      "invalid_rf_packet": "Each RF packet must be empty or exactly 32 bytes (64 hex digits).",
+      "invalid_rf_address": "ShockBurst address must be empty or exactly 4 bytes (8 hex digits), not 00 00 00 00."
     },
     "abort": {
       "already_configured": "This device is already configured."
@@ -54,7 +57,8 @@
   "options": {
     "error": {
       "same_switches": "Stage 1 and stage 3 must use different switches.",
-      "invalid_rf_packet": "Each RF packet must be empty or exactly 32 bytes (64 hex digits)."
+      "invalid_rf_packet": "Each RF packet must be empty or exactly 32 bytes (64 hex digits).",
+      "invalid_rf_address": "ShockBurst address must be empty or exactly 4 bytes (8 hex digits), not 00 00 00 00."
     },
     "step": {
       "init": {
@@ -65,10 +69,14 @@
           "switch_stage3": "Switch for stage 3",
           "analog_entity": "Voltage output (0-10 V)",
           "mqtt_prefix": "MQTT topic prefix",
+          "rf_address": "ShockBurst address",
           "rf_packet_1": "RF packet 1 (Off)",
           "rf_packet_2": "RF packet 2 (Stage 1)",
           "rf_packet_3": "RF packet 3 (Stage 2)",
           "rf_packet_4": "RF packet 4 (Stage 3)"
+        },
+        "data_description": {
+          "rf_address": "4-byte hex, for example 00 00 0A 7A. Empty shows the address from the ESP. A saved value is written to the ESP NVM."
         }
       }
     }

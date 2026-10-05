@@ -33,6 +33,9 @@ Nrf905TransmitAction = nrf905_pluggit_ns.class_("Nrf905TransmitAction", automati
 Nrf905StartSniffAction = nrf905_pluggit_ns.class_(
     "Nrf905StartSniffAction", automation.Action
 )
+Nrf905SetAddressAction = nrf905_pluggit_ns.class_(
+    "Nrf905SetAddressAction", automation.Action
+)
 
 CONFIG_SCHEMA = (
     cv.Schema(
@@ -140,3 +143,22 @@ async def nrf905_transmit_to_code(config, action_id, template_arg, args):
 async def nrf905_start_sniff_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
     return cg.new_Pvariable(action_id, template_arg, paren)
+
+
+@automation.register_action(
+    "nrf905_pluggit.set_address",
+    Nrf905SetAddressAction,
+    cv.Schema(
+        {
+            cv.GenerateID(): cv.use_id(Nrf905Pluggit),
+            cv.Required(CONF_DATA): cv.templatable(cv.string),
+        }
+    ),
+    synchronous=True,
+)
+async def nrf905_set_address_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    var = cg.new_Pvariable(action_id, template_arg, paren)
+    template_ = await cg.templatable(config[CONF_DATA], args, cg.std_string)
+    cg.add(var.set_data(template_))
+    return var

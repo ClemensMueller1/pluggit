@@ -19,11 +19,13 @@ Quellen: Betriebsanleitung 2011, KNX-User-Forum Thread
 - Die FB sendet nur nach Tastendruck (kein Dauerfunk, Sleep nach 2 min)
 
 Die ESPHome-Komponente startet im Replay-Modus (gespeicherte Adresse,
-CRC-16). Sniff nur über den Button „RF Adresse neu lernen“ (1-Byte-
-Adresse `0x00`, CRC aus). Pluggit-Rahmen: Prefix `00 00` plus Payload
-`90` / `80` / `88`. Nach dem Lock die gelernte Adresse im Flash halten
-und Aus/1/2/3-Pakete in der HA-MQTT-Config ablegen; die Fan-Entität
-sendet sie auf `rf/tx`.
+CRC-16) und loggt `NVM ShockBurst address: …`. Sniff nur über den
+Button „RF Adresse neu lernen“ (1-Byte-Adresse `0x00`, CRC aus).
+Pluggit-Rahmen: Prefix `00 00` plus Payload `90` / `80` / `88`. Nach
+dem Lock die gelernte Adresse im Flash halten. Dieselbe Adresse meldet
+der ESP auf `rf/address`; die HA-MQTT-Config zeigt sie und kann sie
+über `rf/address/set` setzen. Aus/1/2/3-Pakete in der HA-MQTT-Config
+ablegen; die Fan-Entität sendet sie auf `rf/tx`.
 
 Beispiel-Sniff (Forum):
 

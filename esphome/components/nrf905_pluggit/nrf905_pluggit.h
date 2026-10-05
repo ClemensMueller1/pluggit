@@ -54,6 +54,7 @@ class Nrf905Pluggit : public Component,
 
   void transmit_hex(const std::string &hex);
   void start_sniff();
+  void set_address_hex(const std::string &hex);
 
  protected:
   void enter_standby_();
@@ -86,7 +87,9 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool address_from_yaml_{false};
+  bool nvm_valid_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};
+  uint8_t nvm_address_[4]{0x00, 0x00, 0x00, 0x00};
   uint8_t last_cfg_[10]{};
   uint32_t last_noise_ms_{0};
   ESPPreferenceObject pref_{};
@@ -108,6 +111,16 @@ template<typename... Ts> class Nrf905StartSniffAction : public Action<Ts...> {
  public:
   explicit Nrf905StartSniffAction(Nrf905Pluggit *parent) : parent_(parent) {}
   void play(const Ts &...x) override { this->parent_->start_sniff(); }
+
+ protected:
+  Nrf905Pluggit *parent_;
+};
+
+template<typename... Ts> class Nrf905SetAddressAction : public Action<Ts...> {
+ public:
+  explicit Nrf905SetAddressAction(Nrf905Pluggit *parent) : parent_(parent) {}
+  TEMPLATABLE_VALUE(std::string, data)
+  void play(const Ts &...x) override { this->parent_->set_address_hex(this->data_.value(x...)); }
 
  protected:
   Nrf905Pluggit *parent_;

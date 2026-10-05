@@ -29,6 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady("MQTT is not ready") from err
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    coordinator.note_reload_listener_ready()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     async def _set_stage(call: ServiceCall) -> None:
@@ -61,6 +62,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if (
+        isinstance(coordinator, PluggitCoordinator)
+        and coordinator.suppress_entry_reload
+    ):
+        coordinator.suppress_entry_reload = False
+        return
     await hass.config_entries.async_reload(entry.entry_id)
 
 

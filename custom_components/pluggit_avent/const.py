@@ -17,6 +17,7 @@ CONF_RF_PACKET_1: Final = "rf_packet_1"
 CONF_RF_PACKET_2: Final = "rf_packet_2"
 CONF_RF_PACKET_3: Final = "rf_packet_3"
 CONF_RF_PACKET_4: Final = "rf_packet_4"
+CONF_RF_ADDRESS: Final = "rf_address"
 
 MODE_RELAY: Final = "relay"
 MODE_ANALOG: Final = "analog"
@@ -33,6 +34,7 @@ PRESET_MODES_ANALOG: Final = (PRESET_REMOTE, PRESET_STAGE1, PRESET_STAGE2, PRESE
 PRESET_MODES_MQTT: Final = (PRESET_OFF, PRESET_STAGE1, PRESET_STAGE2, PRESET_STAGE3)
 
 RF_PACKET_LEN: Final = 32
+RF_ADDRESS_LEN: Final = 4
 RF_PACKET_KEYS: Final = (
     CONF_RF_PACKET_1,
     CONF_RF_PACKET_2,
@@ -50,6 +52,8 @@ VOLTAGE_TOLERANCE: Final = 0.8
 
 MQTT_CMD_SPEED: Final = "speed/set"
 MQTT_CMD_RF_TX: Final = "rf/tx"
+MQTT_CMD_RF_ADDRESS: Final = "rf/address/set"
+MQTT_STATE_RF_ADDRESS: Final = "rf/address"
 MQTT_STATE_RF_RX: Final = "rf/rx"
 MQTT_STATE_SPEED: Final = "speed"
 MQTT_STATE_T1: Final = "t1"
@@ -64,6 +68,11 @@ MQTT_AVAILABILITY: Final = "availability"
 
 DEFAULT_MQTT_PREFIX: Final = "pluggit_avent"
 DEFAULT_NAME: Final = "Pluggit Avent P"
+
+# Set by the config/options flow when the user saved a ShockBurst address.
+# The coordinator consumes the marker once and publishes rf/address/set.
+RF_ADDRESS_PUSH_IDS: Final = "_rf_address_push_ids"
+RF_ADDRESS_PUSH_TITLES: Final = "_rf_address_push_titles"
 
 INTERLOCK_DELAY_S: Final = 0.25
 
@@ -112,6 +121,26 @@ STAGE_TO_PERCENTAGE: Final = {
     FanStage.STAGE2: 66,
     FanStage.STAGE3: 100,
 }
+
+
+def normalize_rf_address(value: str | None) -> str:
+    """Return spaced uppercase hex for a 4-byte ShockBurst address, or empty."""
+    if not value:
+        return ""
+    hex_chars = "".join(c for c in value if c in "0123456789abcdefABCDEF")
+    if not hex_chars:
+        return ""
+    if len(hex_chars) != RF_ADDRESS_LEN * 2:
+        raise ValueError(
+            f"ShockBurst address must be {RF_ADDRESS_LEN} bytes "
+            f"({RF_ADDRESS_LEN * 2} hex digits)"
+        )
+    normalized = " ".join(
+        hex_chars[i : i + 2].upper() for i in range(0, len(hex_chars), 2)
+    )
+    if normalized == "00 00 00 00":
+        raise ValueError("ShockBurst address must not be all zeros")
+    return normalized
 
 
 def normalize_rf_packet(value: str | None) -> str:

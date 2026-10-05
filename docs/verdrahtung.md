@@ -133,8 +133,11 @@ Gehäuse in Sichtweite der KWL (nicht im Metallschrank).
 | DR | GPIO22 |
 
 Button **RF Adresse neu lernen** drücken, Fernbedienung **etwa 20 cm**
-vom Modul halten. Log: `nRF905 SPI` muss an sein.
+vom Modul halten. Log: `nRF905 SPI` muss an sein, und
+`NVM ShockBurst address: …` zeigt die gespeicherte Adresse.
 Taste drücken, Sensor **Funkadresse** zeigt `00 00 xx xx` (wird
-gespeichert). Danach Aus / Stufe 1 / 2 / 3 an der FB drücken und die
+gespeichert). Dieselbe Adresse steht in der HA-Integration unter
+MQTT → ShockBurst-Adresse; dort kann sie auch gesetzt werden.
+Danach Aus / Stufe 1 / 2 / 3 an der FB drücken und die
 vier 32-Byte-Rahmen in HA unter MQTT → Funkpaket 1–4 eintragen.
 Die Fan-Entität sendet sie auf `pluggit_avent/rf/tx`.

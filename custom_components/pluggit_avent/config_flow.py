@@ -21,6 +21,7 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_MODE,
     CONF_MQTT_PREFIX,
+    CONF_RF_ADDRESS,
     CONF_RF_PACKET_1,
     CONF_RF_PACKET_2,
     CONF_RF_PACKET_3,
@@ -33,7 +34,10 @@ from .const import (
     MODE_ANALOG,
     MODE_MQTT,
     MODE_RELAY,
+    RF_ADDRESS_PUSH_IDS,
+    RF_ADDRESS_PUSH_TITLES,
     RF_PACKET_KEYS,
+    normalize_rf_address,
     normalize_rf_packet,
 )
 
@@ -125,6 +129,9 @@ def _mqtt_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 default=defaults.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX),
             ): str,
             vol.Optional(
+                CONF_RF_ADDRESS, default=defaults.get(CONF_RF_ADDRESS, "")
+            ): str,
+            vol.Optional(
                 CONF_RF_PACKET_1, default=defaults.get(CONF_RF_PACKET_1, "")
             ): RF_PACKET_SELECTOR,
             vol.Optional(
@@ -140,15 +147,30 @@ def _mqtt_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
-def _apply_rf_packets(user_input: dict[str, Any]) -> dict[str, Any] | str:
-    """Normalize the four sniffer payloads. Return an error key on failure."""
+def _apply_mqtt_input(user_input: dict[str, Any]) -> dict[str, Any] | str:
+    """Normalize address and the four sniffer payloads. Return an error key."""
     out = dict(user_input)
+    try:
+        out[CONF_RF_ADDRESS] = normalize_rf_address(user_input.get(CONF_RF_ADDRESS, ""))
+    except ValueError:
+        return "invalid_rf_address"
     try:
         for key in RF_PACKET_KEYS:
             out[key] = normalize_rf_packet(user_input.get(key, ""))
     except ValueError:
         return "invalid_rf_packet"
     return out
+
+
+def _mark_rf_address_push(
+    hass: HomeAssistant, *, entry_id: str | None = None, title: str | None = None
+) -> None:
+    """Ask the coordinator to send the saved address to the ESP once."""
+    bucket = hass.data.setdefault(DOMAIN, {})
+    if entry_id:
+        bucket.setdefault(RF_ADDRESS_PUSH_IDS, set()).add(entry_id)
+    if title:
+        bucket.setdefault(RF_ADDRESS_PUSH_TITLES, set()).add(title)
 
 
 def _mqtt_available(hass: HomeAssistant) -> bool:
@@ -218,12 +240,16 @@ class PluggitAventConfigFlow(ConfigFlow, domain=DOMAIN):
             if not _mqtt_available(self.hass):
                 errors["base"] = "mqtt_not_ready"
             else:
-                parsed = _apply_rf_packets(user_input)
+                parsed = _apply_mqtt_input(user_input)
                 if isinstance(parsed, str):
                     errors["base"] = parsed
                 else:
                     parsed[CONF_MQTT_PREFIX] = parsed[CONF_MQTT_PREFIX].strip().strip("/")
                     self._data.update(parsed)
+                    if parsed.get(CONF_RF_ADDRESS):
+                        _mark_rf_address_push(
+                            self.hass, title=self._data[CONF_DEVICE_NAME]
+                        )
                     return self.async_create_entry(
                         title=self._data[CONF_DEVICE_NAME], data=self._data
                     )
@@ -260,7 +286,7 @@ class PluggitAventOptionsFlow(OptionsFlow):
                     errors={"base": "same_switches"},
                 )
             if mode == MODE_MQTT:
-                parsed = _apply_rf_packets(user_input)
+                parsed = _apply_mqtt_input(user_input)
                 if isinstance(parsed, str):
                     return self.async_show_form(
                         step_id="init",
@@ -268,6 +294,10 @@ class PluggitAventOptionsFlow(OptionsFlow):
                         errors={"base": parsed},
                     )
                 parsed[CONF_MQTT_PREFIX] = parsed[CONF_MQTT_PREFIX].strip().strip("/")
+                if parsed.get(CONF_RF_ADDRESS):
+                    _mark_rf_address_push(
+                        self.hass, entry_id=self.config_entry.entry_id
+                    )
                 user_input = parsed
             return self.async_create_entry(title="", data=user_input)
 
@@ -298,6 +328,11 @@ class PluggitAventOptionsFlow(OptionsFlow):
                 vol.Required(
                     CONF_MQTT_PREFIX,
                     default=current.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX),
+                )
+            ] = str
+            fields[
+                vol.Optional(
+                    CONF_RF_ADDRESS, default=current.get(CONF_RF_ADDRESS, "")
                 )
             ] = str
             fields[

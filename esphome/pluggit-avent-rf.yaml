@@ -3,11 +3,14 @@
 # Die Original-Fernbedienung DTH-029255-04 nutzt einen Nordic nRF905
 # auf 868,4 MHz (KNX-User-Forum, Beitrag #218).
 #
-# Boot: Replay mit gespeicherter ShockBurst-Adresse (CRC-16). Fan Aus/1/2/3
-# sendet die vier 32-Byte-Pakete aus der HA-MQTT-Config auf rf/tx.
+# Boot: Replay mit gespeicherter ShockBurst-Adresse (CRC-16). Das Log
+# zeigt „NVM ShockBurst address: …“. Fan Aus/1/2/3 sendet die vier
+# 32-Byte-Pakete aus der HA-MQTT-Config auf rf/tx.
 # Sniff nur über den Button „RF Adresse neu lernen“. Pluggit-Adresse ist
 # 00 00 xx xx. Nach dem Lock jede FB-Taste (Aus/1/2/3) drücken und das
-# 32-Byte-Paket in HA Funkpaket 1–4 eintragen.
+# 32-Byte-Paket in HA Funkpaket 1–4 eintragen. Die Adresse erscheint in
+# der HA-Config (ShockBurst-Adresse) und kann dort gesetzt werden;
+# HA sendet sie auf rf/address/set, der ESP speichert sie im NVM.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
@@ -49,7 +52,7 @@ esphome:
   comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
   project:
     name: pluggit.avent_p_rf
-    version: "1.4.0"
+    version: "1.4.1"
 
 esp32:
   board: esp32dev
@@ -97,12 +100,26 @@ mqtt:
   will_message:
     topic: ${mqtt_prefix}/availability
     payload: offline
+  on_connect:
+    - mqtt.publish:
+        topic: ${mqtt_prefix}/rf/address
+        payload: !lambda "return id(nrf_address).state;"
+        retain: true
   on_message:
     - topic: ${mqtt_prefix}/rf/tx
       then:
         - nrf905_pluggit.transmit:
             id: nrf
             data: !lambda "return x;"
+    - topic: ${mqtt_prefix}/rf/address/set
+      then:
+        - nrf905_pluggit.set_address:
+            id: nrf
+            data: !lambda "return x;"
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/rf/address
+            payload: !lambda "return id(nrf_address).state;"
+            retain: true
 
 spi:
   clk_pin: GPIO18
@@ -126,7 +143,14 @@ nrf905_pluggit:
     id: nrf_last_packet
     name: "Letztes Funkpaket"
   listen_address:
+    id: nrf_address
     name: "Funkadresse"
+    on_value:
+      then:
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/rf/address
+            payload: !lambda "return x;"
+            retain: true
   rf_rx:
     name: "Funkempfang"
   radio_ok:

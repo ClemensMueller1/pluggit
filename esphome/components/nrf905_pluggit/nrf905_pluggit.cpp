@@ -28,8 +28,7 @@ void Nrf905Pluggit::setup() {
   this->spi_setup();
   this->pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("nrf905_pluggit_addr"), true);
   this->sniff_mode_ = false;
-  if (!this->address_from_yaml_)
-    this->load_address_();
+  this->load_address_();
   this->write_config_();
   if (!this->verify_config_()) {
     ESP_LOGE(TAG, "SPI readback mismatch — check CSN/MOSI/MISO/SCK and 3.3 V");
@@ -72,6 +71,8 @@ void Nrf905Pluggit::dump_config() {
   if (this->am_pin_ != nullptr)
     LOG_PIN("  AM Pin: ", this->am_pin_);
   ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, addr[0]=0x00)" : "replay CRC-16");
+  ESP_LOGCONFIG(TAG, "  NVM address: %s",
+                this->nvm_valid_ ? to_hex_(this->nvm_address_, 4).c_str() : "unset");
   ESP_LOGCONFIG(TAG, "  Address: %s",
                 this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset");
 }
@@ -162,17 +163,33 @@ bool Nrf905Pluggit::has_address_() const {
 void Nrf905Pluggit::save_address_() {
   uint32_t packed = static_cast<uint32_t>(this->rx_address_[0]) | (static_cast<uint32_t>(this->rx_address_[1]) << 8) |
                     (static_cast<uint32_t>(this->rx_address_[2]) << 16) | (static_cast<uint32_t>(this->rx_address_[3]) << 24);
-  this->pref_.save(&packed);
+  if (!this->pref_.save(&packed)) {
+    ESP_LOGW(TAG, "NVM ShockBurst address save failed");
+    return;
+  }
+  memcpy(this->nvm_address_, this->rx_address_, 4);
+  this->nvm_valid_ = true;
 }
 
 void Nrf905Pluggit::load_address_() {
   uint32_t packed = 0;
-  if (!this->pref_.load(&packed) || packed == 0)
+  if (!this->pref_.load(&packed) || packed == 0) {
+    this->nvm_valid_ = false;
+    ESP_LOGI(TAG, "NVM ShockBurst address: unset");
     return;
-  this->rx_address_[0] = packed & 0xFF;
-  this->rx_address_[1] = (packed >> 8) & 0xFF;
-  this->rx_address_[2] = (packed >> 16) & 0xFF;
-  this->rx_address_[3] = (packed >> 24) & 0xFF;
+  }
+  this->nvm_address_[0] = packed & 0xFF;
+  this->nvm_address_[1] = (packed >> 8) & 0xFF;
+  this->nvm_address_[2] = (packed >> 16) & 0xFF;
+  this->nvm_address_[3] = (packed >> 24) & 0xFF;
+  this->nvm_valid_ = true;
+  const std::string nvm = to_hex_(this->nvm_address_, 4);
+  ESP_LOGI(TAG, "NVM ShockBurst address: %s", nvm.c_str());
+  if (this->address_from_yaml_) {
+    ESP_LOGI(TAG, "YAML rx_address %s overrides NVM", to_hex_(this->rx_address_, 4).c_str());
+    return;
+  }
+  memcpy(this->rx_address_, this->nvm_address_, 4);
 }
 
 bool Nrf905Pluggit::looks_like_pluggit_(const uint8_t *buf) const {
@@ -247,6 +264,36 @@ void Nrf905Pluggit::start_sniff() {
     this->listen_address_->publish_state("sniff");
   if (this->rf_rx_ != nullptr)
     this->rf_rx_->publish_state(false);
+}
+
+void Nrf905Pluggit::set_address_hex(const std::string &hex) {
+  if (this->is_failed()) {
+    ESP_LOGW(TAG, "ShockBurst address not set: nRF905 setup failed");
+    return;
+  }
+  uint8_t buf[4] = {0};
+  const size_t n = this->parse_hex_(hex, buf, 4);
+  if (n != 4 || (buf[0] | buf[1] | buf[2] | buf[3]) == 0) {
+    ESP_LOGW(TAG, "ShockBurst address rejected (need 4 non-zero bytes): '%s'", hex.c_str());
+    return;
+  }
+  if (!this->sniff_mode_ && memcmp(buf, this->rx_address_, 4) == 0) {
+    const std::string pretty = to_hex_(buf, 4);
+    ESP_LOGD(TAG, "ShockBurst address unchanged %s", pretty.c_str());
+    if (this->listen_address_ != nullptr)
+      this->listen_address_->publish_state(pretty);
+    return;
+  }
+  memcpy(this->rx_address_, buf, 4);
+  this->sniff_mode_ = false;
+  this->save_address_();
+  this->write_config_();
+  this->write_tx_address_();
+  this->enter_rx_();
+  const std::string pretty = to_hex_(this->rx_address_, 4);
+  ESP_LOGI(TAG, "ShockBurst address set to %s and saved to NVM", pretty.c_str());
+  if (this->listen_address_ != nullptr)
+    this->listen_address_->publish_state(pretty);
 }
 
 void Nrf905Pluggit::transmit_hex(const std::string &hex) {

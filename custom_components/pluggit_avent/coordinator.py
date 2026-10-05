@@ -23,6 +23,7 @@ from .const import (
     CONF_ANALOG_ENTITY,
     CONF_MODE,
     CONF_MQTT_PREFIX,
+    CONF_RF_ADDRESS,
     CONF_SWITCH_STAGE1,
     CONF_SWITCH_STAGE3,
     DOMAIN,
@@ -32,20 +33,25 @@ from .const import (
     MODE_MQTT,
     MODE_RELAY,
     MQTT_AVAILABILITY,
+    MQTT_CMD_RF_ADDRESS,
     MQTT_CMD_RF_TX,
     MQTT_CMD_SPEED,
     MQTT_STATE_BYPASS,
     MQTT_STATE_FAULT,
     MQTT_STATE_FILTER,
+    MQTT_STATE_RF_ADDRESS,
     MQTT_STATE_RH,
     MQTT_STATE_SPEED,
     MQTT_STATE_T1,
     MQTT_STATE_T2,
     MQTT_STATE_T3,
     MQTT_STATE_T4,
+    RF_ADDRESS_PUSH_IDS,
+    RF_ADDRESS_PUSH_TITLES,
     STAGE_TO_PERCENTAGE,
     STAGE_TO_RF_PACKET,
     STAGE_TO_VOLTAGE,
+    normalize_rf_address,
     voltage_to_stage,
 )
 
@@ -111,6 +117,11 @@ class PluggitCoordinator(DataUpdateCoordinator[PluggitData]):
         self.data = PluggitData()
         self._unsubs: list[Callable[[], None]] = []
         self._lock = asyncio.Lock()
+        # User saved an address; ignore ESP reports until that value is echoed.
+        self._address_push_pending = False
+        # Skip the entry reload when we only mirror the ESP address into config.
+        self.suppress_entry_reload = False
+        self._reload_listener_ready = False
 
     @property
     def mode(self) -> str:
@@ -140,8 +151,15 @@ class PluggitCoordinator(DataUpdateCoordinator[PluggitData]):
         else:
             if not await async_wait_for_mqtt_client(self.hass):
                 raise ConfigEntryNotReady("MQTT is not set up yet")
+            self._address_push_pending = self._consume_address_push()
             await self._async_subscribe_mqtt()
+            if self._address_push_pending:
+                await self._async_publish_rf_address()
         await self.async_refresh()
+
+    def note_reload_listener_ready(self) -> None:
+        """The config-entry update listener is installed."""
+        self._reload_listener_ready = True
 
     async def async_unload(self) -> None:
         for unsub in self._unsubs:
@@ -203,10 +221,98 @@ class PluggitCoordinator(DataUpdateCoordinator[PluggitData]):
                 payload = payload.decode()
             self.data.available = payload.lower() in ("online", "1", "true")
             self.async_set_updated_data(self.data)
+            if self.data.available and self._address_push_pending:
+                self.hass.async_create_task(self._async_publish_rf_address())
 
         self._unsubs.append(
             await async_subscribe(self.hass, f"{prefix}/{MQTT_AVAILABILITY}", _avail)
         )
+
+        @callback
+        def _address(msg) -> None:
+            payload = msg.payload
+            if isinstance(payload, bytes):
+                payload = payload.decode()
+            self._handle_rf_address(payload)
+
+        self._unsubs.append(
+            await async_subscribe(
+                self.hass, f"{prefix}/{MQTT_STATE_RF_ADDRESS}", _address
+            )
+        )
+
+    def _consume_address_push(self) -> bool:
+        """Return True when this setup should send the configured address."""
+        bucket = self.hass.data.get(DOMAIN, {})
+        wanted = False
+        push_ids = bucket.get(RF_ADDRESS_PUSH_IDS)
+        if isinstance(push_ids, set) and self.entry.entry_id in push_ids:
+            push_ids.discard(self.entry.entry_id)
+            wanted = True
+        push_titles = bucket.get(RF_ADDRESS_PUSH_TITLES)
+        if isinstance(push_titles, set) and self.entry.title in push_titles:
+            push_titles.discard(self.entry.title)
+            wanted = True
+        return wanted and bool((self.cfg.get(CONF_RF_ADDRESS) or "").strip())
+
+    def _configured_rf_address(self) -> str:
+        return (self.cfg.get(CONF_RF_ADDRESS) or "").strip()
+
+    async def _async_publish_rf_address(self) -> None:
+        address = self._configured_rf_address()
+        if not address:
+            self._address_push_pending = False
+            return
+        prefix = self.cfg[CONF_MQTT_PREFIX]
+        _LOGGER.info("Set ShockBurst address %s via %s/%s", address, prefix, MQTT_CMD_RF_ADDRESS)
+        await async_publish(
+            self.hass,
+            f"{prefix}/{MQTT_CMD_RF_ADDRESS}",
+            address,
+            qos=1,
+            retain=False,
+        )
+
+    def _handle_rf_address(self, payload: str) -> None:
+        text = payload.strip()
+        lowered = text.lower()
+        if lowered in ("", "sniff"):
+            return
+        configured = self._configured_rf_address()
+        if lowered == "unset":
+            if configured and not self._address_push_pending:
+                self._address_push_pending = True
+                self.hass.async_create_task(self._async_publish_rf_address())
+            return
+        try:
+            addr = normalize_rf_address(text)
+        except ValueError:
+            _LOGGER.debug("Ignoring ShockBurst address payload %r", text)
+            return
+        if not addr:
+            return
+        if self._address_push_pending:
+            if addr == configured:
+                self._address_push_pending = False
+                _LOGGER.debug("ESP confirmed ShockBurst address %s", addr)
+            return
+        if addr == configured:
+            return
+        self._store_reported_address(addr)
+
+    def _store_reported_address(self, addr: str) -> None:
+        """Mirror the ESP address into the config entry without reloading."""
+        _LOGGER.info("ShockBurst address from ESP: %s", addr)
+        if self._reload_listener_ready:
+            self.suppress_entry_reload = True
+        if CONF_RF_ADDRESS in self.entry.options:
+            self.hass.config_entries.async_update_entry(
+                self.entry, options={**self.entry.options, CONF_RF_ADDRESS: addr}
+            )
+        else:
+            self.hass.config_entries.async_update_entry(
+                self.entry, data={**self.entry.data, CONF_RF_ADDRESS: addr}
+            )
 
     async def _async_update_data(self) -> PluggitData:
         if self.mode == MODE_RELAY:

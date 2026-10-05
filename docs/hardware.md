@@ -115,9 +115,11 @@ Firmware: `esphome/pluggit-avent-rf.yaml` plus External Component
 Arduino-Variante: `firmware/nrf905_sniffer.ino`.
 
 Zuerst sniffen (FB **dicht am Modul**, oft nur 20 cm), gelernte
-ShockBurst-Adresse `00 00 xx xx` notieren. CSN liegt auf **GPIO5**.
-Die vier 32-Byte-Pakete (Aus / Stufe 1 / 2 / 3) in der HA-Integration
-unter MQTT eintragen; die Fan-Entität spielt sie über `rf/tx` aus.
+ShockBurst-Adresse `00 00 xx xx` notieren (Boot-Log
+`NVM ShockBurst address`). CSN liegt auf **GPIO5**.
+Dieselbe Adresse und die vier 32-Byte-Pakete (Aus / Stufe 1 / 2 / 3)
+in der HA-Integration unter MQTT eintragen; die Fan-Entität spielt die
+Pakete über `rf/tx` aus. Ein gesetzter Adresswert geht an den ESP.
 Das Pairing der Original-FB bleibt erhalten, solange du dieselbe
 Adresse verwendest. Modul muss **868 MHz** sein (nicht 433-MHz-PTR8000).
 
