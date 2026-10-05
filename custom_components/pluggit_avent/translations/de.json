@@ -26,21 +26,36 @@
       },
       "mqtt": {
         "title": "MQTT- / ESPHome-Gateway",
-        "description": "Topic-Präfix der ESPHome-Firmware (ohne Schrägstrich am Ende).",
+        "description": "Topic-Präfix der ESPHome-Firmware. Die 32-Byte-Hex-Rahmen vom nRF905-Sniffer einfügen (Letztes Funkpaket / pluggit_avent/rf/rx). Paket 1 = Aus, 2 = Stufe 1, 3 = Stufe 2, 4 = Stufe 3.",
         "data": {
-          "mqtt_prefix": "MQTT-Topic-Präfix"
+          "mqtt_prefix": "MQTT-Topic-Präfix",
+          "rf_packet_1": "Funkpaket 1 (Aus)",
+          "rf_packet_2": "Funkpaket 2 (Stufe 1)",
+          "rf_packet_3": "Funkpaket 3 (Stufe 2)",
+          "rf_packet_4": "Funkpaket 4 (Stufe 3)"
+        },
+        "data_description": {
+          "rf_packet_1": "32 Byte Hex vom Sniffer, Leerzeichen optional. Wird bei Aus gesendet.",
+          "rf_packet_2": "32 Byte Hex vom Sniffer. Wird bei Stufe 1 gesendet.",
+          "rf_packet_3": "32 Byte Hex vom Sniffer. Wird bei Stufe 2 gesendet.",
+          "rf_packet_4": "32 Byte Hex vom Sniffer. Wird bei Stufe 3 gesendet."
         }
       }
     },
     "error": {
       "same_switches": "Stufe 1 und Stufe 3 müssen unterschiedliche Schalter verwenden.",
-      "mqtt_not_ready": "Die MQTT-Integration ist nicht eingerichtet."
+      "mqtt_not_ready": "Die MQTT-Integration ist nicht eingerichtet.",
+      "invalid_rf_packet": "Jedes Funkpaket muss leer sein oder genau 32 Byte (64 Hex-Zeichen) haben."
     },
     "abort": {
       "already_configured": "Dieses Gerät ist bereits konfiguriert."
     }
   },
   "options": {
+    "error": {
+      "same_switches": "Stufe 1 und Stufe 3 müssen unterschiedliche Schalter verwenden.",
+      "invalid_rf_packet": "Jedes Funkpaket muss leer sein oder genau 32 Byte (64 Hex-Zeichen) haben."
+    },
     "step": {
       "init": {
         "title": "Pluggit Avent P Optionen",
@@ -49,7 +64,11 @@
           "switch_stage1": "Schalter Stufe 1",
           "switch_stage3": "Schalter Stufe 3",
           "analog_entity": "Spannungsausgang (0-10 V)",
-          "mqtt_prefix": "MQTT-Topic-Präfix"
+          "mqtt_prefix": "MQTT-Topic-Präfix",
+          "rf_packet_1": "Funkpaket 1 (Aus)",
+          "rf_packet_2": "Funkpaket 2 (Stufe 1)",
+          "rf_packet_3": "Funkpaket 3 (Stufe 2)",
+          "rf_packet_4": "Funkpaket 4 (Stufe 3)"
         }
       }
     }
@@ -64,7 +83,8 @@
               "Stufe 1": "Stufe 1",
               "Stufe 2": "Stufe 2",
               "Stufe 3": "Stufe 3",
-              "Fernbedienung": "Fernbedienung"
+              "Fernbedienung": "Fernbedienung",
+              "Aus": "Aus"
             }
           }
         }

@@ -13,6 +13,10 @@ CONF_SWITCH_STAGE3: Final = "switch_stage3"
 CONF_ANALOG_ENTITY: Final = "analog_entity"
 CONF_MQTT_PREFIX: Final = "mqtt_prefix"
 CONF_DEVICE_NAME: Final = "device_name"
+CONF_RF_PACKET_1: Final = "rf_packet_1"
+CONF_RF_PACKET_2: Final = "rf_packet_2"
+CONF_RF_PACKET_3: Final = "rf_packet_3"
+CONF_RF_PACKET_4: Final = "rf_packet_4"
 
 MODE_RELAY: Final = "relay"
 MODE_ANALOG: Final = "analog"
@@ -22,10 +26,19 @@ PRESET_STAGE1: Final = "Stufe 1"
 PRESET_STAGE2: Final = "Stufe 2"
 PRESET_STAGE3: Final = "Stufe 3"
 PRESET_REMOTE: Final = "Fernbedienung"
+PRESET_OFF: Final = "Aus"
 
 PRESET_MODES_RELAY: Final = (PRESET_STAGE1, PRESET_STAGE2, PRESET_STAGE3)
 PRESET_MODES_ANALOG: Final = (PRESET_REMOTE, PRESET_STAGE1, PRESET_STAGE2, PRESET_STAGE3)
-PRESET_MODES_MQTT: Final = (PRESET_STAGE1, PRESET_STAGE2, PRESET_STAGE3)
+PRESET_MODES_MQTT: Final = (PRESET_OFF, PRESET_STAGE1, PRESET_STAGE2, PRESET_STAGE3)
+
+RF_PACKET_LEN: Final = 32
+RF_PACKET_KEYS: Final = (
+    CONF_RF_PACKET_1,
+    CONF_RF_PACKET_2,
+    CONF_RF_PACKET_3,
+    CONF_RF_PACKET_4,
+)
 
 # Official analog control voltages on J8-7 / J8-8 (potential-free).
 VOLTAGE_REMOTE: Final = 0.0
@@ -36,6 +49,8 @@ VOLTAGE_STAGE3: Final = 9.0
 VOLTAGE_TOLERANCE: Final = 0.8
 
 MQTT_CMD_SPEED: Final = "speed/set"
+MQTT_CMD_RF_TX: Final = "rf/tx"
+MQTT_STATE_RF_RX: Final = "rf/rx"
 MQTT_STATE_SPEED: Final = "speed"
 MQTT_STATE_T1: Final = "t1"
 MQTT_STATE_T2: Final = "t2"
@@ -71,9 +86,17 @@ STAGE_TO_PRESET: Final = {
 
 PRESET_TO_STAGE: Final = {
     PRESET_REMOTE: FanStage.REMOTE,
+    PRESET_OFF: FanStage.REMOTE,
     PRESET_STAGE1: FanStage.STAGE1,
     PRESET_STAGE2: FanStage.STAGE2,
     PRESET_STAGE3: FanStage.STAGE3,
+}
+
+STAGE_TO_RF_PACKET: Final = {
+    FanStage.REMOTE: CONF_RF_PACKET_1,
+    FanStage.STAGE1: CONF_RF_PACKET_2,
+    FanStage.STAGE2: CONF_RF_PACKET_3,
+    FanStage.STAGE3: CONF_RF_PACKET_4,
 }
 
 STAGE_TO_VOLTAGE: Final = {
@@ -89,6 +112,20 @@ STAGE_TO_PERCENTAGE: Final = {
     FanStage.STAGE2: 66,
     FanStage.STAGE3: 100,
 }
+
+
+def normalize_rf_packet(value: str | None) -> str:
+    """Return spaced uppercase hex for a 32-byte nRF905 payload, or empty."""
+    if not value:
+        return ""
+    hex_chars = "".join(c for c in value if c in "0123456789abcdefABCDEF")
+    if not hex_chars:
+        return ""
+    if len(hex_chars) != RF_PACKET_LEN * 2:
+        raise ValueError(
+            f"RF packet must be {RF_PACKET_LEN} bytes ({RF_PACKET_LEN * 2} hex digits)"
+        )
+    return " ".join(hex_chars[i : i + 2].upper() for i in range(0, len(hex_chars), 2))
 
 
 def percentage_to_stage(percentage: int | None, *, allow_remote: bool) -> FanStage:

@@ -118,9 +118,26 @@ zweite LED dazu.
 
 nRF905 nur mit 3,3 V. Antenne aufschrauben. ESP32 und Modul in
 Gehäuse in Sichtweite der KWL (nicht im Metallschrank).
+
+| nRF905 | ESP32 |
+|---|---|
+| VCC | 3V3 |
+| GND | GND |
+| MOSI / SI | GPIO23 |
+| MISO / SO | GPIO19 |
+| SCK | GPIO18 |
+| CSN | GPIO5 |
+| CE | GPIO4 |
+| TXE | GPIO16 |
+| PWR | GPIO17 |
+| DR | GPIO22 |
+
 Beim ersten Sniff die Fernbedienung **etwa 20 cm** vom Modul halten —
 viele 868-MHz-Module haben sehr kurze Reichweite.
 Log: `nRF905 SPI` muss an sein (sonst Verdrahtung CSN/MOSI/MISO/SCK).
 Taste drücken, Sensor **Funkadresse** zeigt `00 00 xx xx`. Danach Taste
-noch einmal für ein volles 32-Byte-Paket. Replay über den Button
-„RF Replay“ oder MQTT `pluggit_avent/rf/rx`.
+noch einmal für ein volles 32-Byte-Paket.
+
+Die vier Rahmen (Aus, Stufe 1, Stufe 2, Stufe 3) in die HA-Integration
+unter MQTT → Funkpaket 1–4 eintragen. Die Fan-Entität sendet sie auf
+`pluggit_avent/rf/tx`.

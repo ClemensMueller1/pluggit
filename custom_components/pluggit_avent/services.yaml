@@ -8,7 +8,7 @@ set_stage:
   fields:
     stage:
       name: Stufe
-      description: 1 = Mindestlüftung, 2 = Nennlüftung, 3 = Party, 0 = Fernbedienung (nur Analog).
+      description: 1 = Mindestlüftung, 2 = Nennlüftung, 3 = Party, 0 = Aus / Fernbedienung (Funkpaket 1 oder Analog 0 V).
       required: true
       selector:
         number:

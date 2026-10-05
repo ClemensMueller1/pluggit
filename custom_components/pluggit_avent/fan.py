@@ -19,6 +19,7 @@ from .const import (
     MODE_ANALOG,
     MODE_MQTT,
     MODE_RELAY,
+    PRESET_OFF,
     PRESET_MODES_ANALOG,
     PRESET_MODES_MQTT,
     PRESET_MODES_RELAY,
@@ -91,7 +92,7 @@ class PluggitFan(CoordinatorEntity[PluggitCoordinator], FanEntity):
 
     @property
     def is_on(self) -> bool:
-        if self.coordinator.mode == MODE_ANALOG:
+        if self.coordinator.mode in (MODE_ANALOG, MODE_MQTT):
             return self.coordinator.data.stage != FanStage.REMOTE
         return True
 
@@ -101,13 +102,14 @@ class PluggitFan(CoordinatorEntity[PluggitCoordinator], FanEntity):
 
     @property
     def preset_mode(self) -> str | None:
-        return STAGE_TO_PRESET.get(self.coordinator.data.stage)
+        stage = self.coordinator.data.stage
+        if self.coordinator.mode == MODE_MQTT and stage == FanStage.REMOTE:
+            return PRESET_OFF
+        return STAGE_TO_PRESET.get(stage)
 
     async def async_set_percentage(self, percentage: int) -> None:
-        allow_remote = self.coordinator.mode == MODE_ANALOG
+        allow_remote = self.coordinator.mode in (MODE_ANALOG, MODE_MQTT)
         stage = percentage_to_stage(percentage, allow_remote=allow_remote)
-        if percentage == 0 and self.coordinator.mode == MODE_MQTT:
-            stage = FanStage.STAGE1
         await self.coordinator.async_set_stage(stage)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
@@ -130,7 +132,7 @@ class PluggitFan(CoordinatorEntity[PluggitCoordinator], FanEntity):
             await self.coordinator.async_set_stage(FanStage.STAGE2)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        if self.coordinator.mode == MODE_ANALOG:
+        if self.coordinator.mode in (MODE_ANALOG, MODE_MQTT):
             await self.coordinator.async_set_stage(FanStage.REMOTE)
         else:
             await self.coordinator.async_set_stage(FanStage.STAGE1)

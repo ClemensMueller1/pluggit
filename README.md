@@ -62,11 +62,17 @@ Typ *Integration*. Danach „Pluggit Avent P“ herunterladen, HA neu starten.
 | Analog | 1× `number` (Volt) | Stufe 1–3, 0 V = Fernbedienung |
 | MQTT | Topic-Präfix `pluggit_avent` | Stufen + Sensoren (UART/Funk) |
 
+MQTT-Modus Funk: vier 32-Byte-Hex-Pakete aus dem Sniffer eintragen
+(Optionen der Integration). Paket 1 = Aus, 2 = Stufe 1, 3 = Stufe 2,
+4 = Stufe 3. Die Fan-Entität sendet sie auf `pluggit_avent/rf/tx`.
+
 MQTT-Topics des Gateways:
 
 | Topic | Richtung | Inhalt |
 |---|---|---|
-| `pluggit_avent/speed/set` | HA → Gerät | `1` `2` `3` (`0` = FB, nur Analog) |
+| `pluggit_avent/speed/set` | HA → Gerät | `1` `2` `3` (`0` = Aus) |
+| `pluggit_avent/rf/tx` | HA → ESP | 32-Byte-Hex, Replay |
+| `pluggit_avent/rf/rx` | ESP → HA | sniffed 32-Byte-Hex |
 | `pluggit_avent/speed` | Gerät → HA | aktuelle Stufe |
 | `pluggit_avent/t1` … `t4` | Gerät → HA | Temperaturen °C |
 | `pluggit_avent/humidity` | Gerät → HA | % rF |

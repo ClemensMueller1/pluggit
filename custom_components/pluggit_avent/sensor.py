@@ -22,7 +22,9 @@ from .const import (
     CONF_MODE,
     DEFAULT_NAME,
     DOMAIN,
+    FanStage,
     MODE_MQTT,
+    PRESET_OFF,
     STAGE_TO_PRESET,
 )
 from .coordinator import PluggitCoordinator, PluggitData
@@ -131,6 +133,12 @@ class PluggitSensor(CoordinatorEntity[PluggitCoordinator], SensorEntity):
 
     @property
     def native_value(self) -> float | str | None:
+        if (
+            self.entity_description.key == "stage"
+            and self.coordinator.mode == MODE_MQTT
+            and self.coordinator.data.stage == FanStage.REMOTE
+        ):
+            return PRESET_OFF
         return self.entity_description.value_fn(self.coordinator.data)
 
     @property

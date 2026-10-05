@@ -26,21 +26,36 @@
       },
       "mqtt": {
         "title": "MQTT / ESPHome gateway",
-        "description": "Topic prefix used by the ESPHome firmware (without trailing slash).",
+        "description": "Topic prefix of the ESPHome firmware. Paste the 32-byte hex frames from the nRF905 sniffer (Letztes Funkpaket / pluggit_avent/rf/rx). Packet 1 = Off, 2 = Stage 1, 3 = Stage 2, 4 = Stage 3.",
         "data": {
-          "mqtt_prefix": "MQTT topic prefix"
+          "mqtt_prefix": "MQTT topic prefix",
+          "rf_packet_1": "RF packet 1 (Off)",
+          "rf_packet_2": "RF packet 2 (Stage 1)",
+          "rf_packet_3": "RF packet 3 (Stage 2)",
+          "rf_packet_4": "RF packet 4 (Stage 3)"
+        },
+        "data_description": {
+          "rf_packet_1": "32-byte hex from the sniffer, spaces optional. Sent on Off.",
+          "rf_packet_2": "32-byte hex from the sniffer. Sent on Stage 1.",
+          "rf_packet_3": "32-byte hex from the sniffer. Sent on Stage 2.",
+          "rf_packet_4": "32-byte hex from the sniffer. Sent on Stage 3."
         }
       }
     },
     "error": {
       "same_switches": "Stage 1 and stage 3 must use different switches.",
-      "mqtt_not_ready": "The MQTT integration is not set up."
+      "mqtt_not_ready": "The MQTT integration is not set up.",
+      "invalid_rf_packet": "Each RF packet must be empty or exactly 32 bytes (64 hex digits)."
     },
     "abort": {
       "already_configured": "This device is already configured."
     }
   },
   "options": {
+    "error": {
+      "same_switches": "Stage 1 and stage 3 must use different switches.",
+      "invalid_rf_packet": "Each RF packet must be empty or exactly 32 bytes (64 hex digits)."
+    },
     "step": {
       "init": {
         "title": "Pluggit Avent P options",
@@ -49,7 +64,11 @@
           "switch_stage1": "Switch for stage 1",
           "switch_stage3": "Switch for stage 3",
           "analog_entity": "Voltage output (0-10 V)",
-          "mqtt_prefix": "MQTT topic prefix"
+          "mqtt_prefix": "MQTT topic prefix",
+          "rf_packet_1": "RF packet 1 (Off)",
+          "rf_packet_2": "RF packet 2 (Stage 1)",
+          "rf_packet_3": "RF packet 3 (Stage 2)",
+          "rf_packet_4": "RF packet 4 (Stage 3)"
         }
       }
     }
@@ -64,7 +83,8 @@
               "Stufe 1": "Stage 1",
               "Stufe 2": "Stage 2",
               "Stufe 3": "Stage 3",
-              "Fernbedienung": "Remote"
+              "Fernbedienung": "Remote",
+              "Aus": "Off"
             }
           }
         }

@@ -27,6 +27,7 @@ from .const import (
     MODE_MQTT,
     MODE_RELAY,
     MQTT_AVAILABILITY,
+    MQTT_CMD_RF_TX,
     MQTT_CMD_SPEED,
     MQTT_STATE_BYPASS,
     MQTT_STATE_FAULT,
@@ -38,6 +39,7 @@ from .const import (
     MQTT_STATE_T3,
     MQTT_STATE_T4,
     STAGE_TO_PERCENTAGE,
+    STAGE_TO_RF_PACKET,
     STAGE_TO_VOLTAGE,
     voltage_to_stage,
 )
@@ -277,6 +279,22 @@ class PluggitCoordinator(DataUpdateCoordinator[PluggitData]):
 
     async def _async_set_mqtt(self, stage: FanStage) -> None:
         prefix = self.cfg[CONF_MQTT_PREFIX]
+        packet_key = STAGE_TO_RF_PACKET.get(stage)
+        packet = (self.cfg.get(packet_key) or "").strip() if packet_key else ""
+        if packet:
+            await async_publish(
+                self.hass,
+                f"{prefix}/{MQTT_CMD_RF_TX}",
+                packet,
+                qos=1,
+                retain=False,
+            )
+        elif packet_key:
+            _LOGGER.warning(
+                "No RF packet configured for stage %s (%s); sniff the remote and paste the 32-byte hex",
+                int(stage),
+                packet_key,
+            )
         await async_publish(
             self.hass,
             f"{prefix}/{MQTT_CMD_SPEED}",

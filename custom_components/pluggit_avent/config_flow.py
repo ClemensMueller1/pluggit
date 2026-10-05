@@ -21,6 +21,10 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_MODE,
     CONF_MQTT_PREFIX,
+    CONF_RF_PACKET_1,
+    CONF_RF_PACKET_2,
+    CONF_RF_PACKET_3,
+    CONF_RF_PACKET_4,
     CONF_SWITCH_STAGE1,
     CONF_SWITCH_STAGE3,
     DEFAULT_MQTT_PREFIX,
@@ -29,6 +33,8 @@ from .const import (
     MODE_ANALOG,
     MODE_MQTT,
     MODE_RELAY,
+    RF_PACKET_KEYS,
+    normalize_rf_packet,
 )
 
 MODE_SELECTOR = selector.SelectSelector(
@@ -57,6 +63,10 @@ SWITCH_SELECTOR = selector.EntitySelector(
 
 NUMBER_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=["number", "input_number"])
+)
+
+RF_PACKET_SELECTOR = selector.TextSelector(
+    selector.TextSelectorConfig(multiline=True)
 )
 
 
@@ -114,8 +124,31 @@ def _mqtt_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_MQTT_PREFIX,
                 default=defaults.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX),
             ): str,
+            vol.Optional(
+                CONF_RF_PACKET_1, default=defaults.get(CONF_RF_PACKET_1, "")
+            ): RF_PACKET_SELECTOR,
+            vol.Optional(
+                CONF_RF_PACKET_2, default=defaults.get(CONF_RF_PACKET_2, "")
+            ): RF_PACKET_SELECTOR,
+            vol.Optional(
+                CONF_RF_PACKET_3, default=defaults.get(CONF_RF_PACKET_3, "")
+            ): RF_PACKET_SELECTOR,
+            vol.Optional(
+                CONF_RF_PACKET_4, default=defaults.get(CONF_RF_PACKET_4, "")
+            ): RF_PACKET_SELECTOR,
         }
     )
+
+
+def _apply_rf_packets(user_input: dict[str, Any]) -> dict[str, Any] | str:
+    """Normalize the four sniffer payloads. Return an error key on failure."""
+    out = dict(user_input)
+    try:
+        for key in RF_PACKET_KEYS:
+            out[key] = normalize_rf_packet(user_input.get(key, ""))
+    except ValueError:
+        return "invalid_rf_packet"
+    return out
 
 
 def _mqtt_available(hass: HomeAssistant) -> bool:
@@ -185,13 +218,19 @@ class PluggitAventConfigFlow(ConfigFlow, domain=DOMAIN):
             if not _mqtt_available(self.hass):
                 errors["base"] = "mqtt_not_ready"
             else:
-                prefix = user_input[CONF_MQTT_PREFIX].strip().strip("/")
-                self._data[CONF_MQTT_PREFIX] = prefix
-                return self.async_create_entry(
-                    title=self._data[CONF_DEVICE_NAME], data=self._data
-                )
+                parsed = _apply_rf_packets(user_input)
+                if isinstance(parsed, str):
+                    errors["base"] = parsed
+                else:
+                    parsed[CONF_MQTT_PREFIX] = parsed[CONF_MQTT_PREFIX].strip().strip("/")
+                    self._data.update(parsed)
+                    return self.async_create_entry(
+                        title=self._data[CONF_DEVICE_NAME], data=self._data
+                    )
         return self.async_show_form(
-            step_id="mqtt", data_schema=_mqtt_schema(), errors=errors
+            step_id="mqtt",
+            data_schema=_mqtt_schema(),
+            errors=errors,
         )
 
     @staticmethod
@@ -220,6 +259,16 @@ class PluggitAventOptionsFlow(OptionsFlow):
                     data_schema=self._schema(mode, current),
                     errors={"base": "same_switches"},
                 )
+            if mode == MODE_MQTT:
+                parsed = _apply_rf_packets(user_input)
+                if isinstance(parsed, str):
+                    return self.async_show_form(
+                        step_id="init",
+                        data_schema=self._schema(mode, current),
+                        errors={"base": parsed},
+                    )
+                parsed[CONF_MQTT_PREFIX] = parsed[CONF_MQTT_PREFIX].strip().strip("/")
+                user_input = parsed
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
@@ -251,4 +300,24 @@ class PluggitAventOptionsFlow(OptionsFlow):
                     default=current.get(CONF_MQTT_PREFIX, DEFAULT_MQTT_PREFIX),
                 )
             ] = str
+            fields[
+                vol.Optional(
+                    CONF_RF_PACKET_1, default=current.get(CONF_RF_PACKET_1, "")
+                )
+            ] = RF_PACKET_SELECTOR
+            fields[
+                vol.Optional(
+                    CONF_RF_PACKET_2, default=current.get(CONF_RF_PACKET_2, "")
+                )
+            ] = RF_PACKET_SELECTOR
+            fields[
+                vol.Optional(
+                    CONF_RF_PACKET_3, default=current.get(CONF_RF_PACKET_3, "")
+                )
+            ] = RF_PACKET_SELECTOR
+            fields[
+                vol.Optional(
+                    CONF_RF_PACKET_4, default=current.get(CONF_RF_PACKET_4, "")
+                )
+            ] = RF_PACKET_SELECTOR
         return vol.Schema(fields)
