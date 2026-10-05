@@ -6,6 +6,7 @@
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
+#include "esphome/core/preferences.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/spi/spi.h"
 #include "esphome/components/text_sensor/text_sensor.h"
@@ -41,6 +42,7 @@ class Nrf905Pluggit : public Component,
     this->rx_address_[1] = b1;
     this->rx_address_[2] = b2;
     this->rx_address_[3] = b3;
+    this->address_from_yaml_ = true;
     this->sniff_mode_ = false;
   }
   void register_on_packet_trigger(Trigger<std::string> *trigger) { this->on_packet_.push_back(trigger); }
@@ -61,7 +63,10 @@ class Nrf905Pluggit : public Component,
   void enter_rx_();
   void read_payload_();
   bool looks_like_pluggit_(const uint8_t *buf) const;
+  bool has_address_() const;
   void lock_address_(const uint8_t *sniff_buf);
+  void save_address_();
+  void load_address_();
   void publish_packet_(const uint8_t *buf, size_t len);
   void log_heartbeat_();
   static std::string to_hex_(const uint8_t *data, size_t len);
@@ -79,10 +84,12 @@ class Nrf905Pluggit : public Component,
   binary_sensor::BinarySensor *radio_ok_{nullptr};
   std::vector<Trigger<std::string> *> on_packet_;
 
-  bool sniff_mode_{true};
+  bool sniff_mode_{false};
+  bool address_from_yaml_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};
   uint8_t last_cfg_[10]{};
   uint32_t last_noise_ms_{0};
+  ESPPreferenceObject pref_{};
 };
 
 class Nrf905PacketTrigger : public Trigger<std::string> {};
@@ -91,7 +98,7 @@ template<typename... Ts> class Nrf905TransmitAction : public Action<Ts...> {
  public:
   explicit Nrf905TransmitAction(Nrf905Pluggit *parent) : parent_(parent) {}
   TEMPLATABLE_VALUE(std::string, data)
-  void play(Ts... x) override { this->parent_->transmit_hex(this->data_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->transmit_hex(this->data_.value(x...)); }
 
  protected:
   Nrf905Pluggit *parent_;
@@ -100,7 +107,7 @@ template<typename... Ts> class Nrf905TransmitAction : public Action<Ts...> {
 template<typename... Ts> class Nrf905StartSniffAction : public Action<Ts...> {
  public:
   explicit Nrf905StartSniffAction(Nrf905Pluggit *parent) : parent_(parent) {}
-  void play(Ts... x) override { this->parent_->start_sniff(); }
+  void play(const Ts &...x) override { this->parent_->start_sniff(); }
 
  protected:
   Nrf905Pluggit *parent_;

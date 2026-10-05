@@ -3,11 +3,11 @@
 # Die Original-Fernbedienung DTH-029255-04 nutzt einen Nordic nRF905
 # auf 868,4 MHz (KNX-User-Forum, Beitrag #218).
 #
-# Boot: Sniff-Modus (1-Byte-Adresse 0x00, CRC aus). Pluggit nutzt die
-# ShockBurst-Adresse 00 00 xx xx — nicht das Nordic-Default E7 E7 E7 E7.
-# Nach dem ersten gültigen Tastendruck sperrt die Firmware die gelernte
-# Adresse und schaltet auf CRC-16. Danach Taste erneut drücken für ein
-# vollständiges 32-Byte-Paket.
+# Boot: Replay mit gespeicherter ShockBurst-Adresse (CRC-16). Fan Aus/1/2/3
+# sendet die vier 32-Byte-Pakete aus der HA-MQTT-Config auf rf/tx.
+# Sniff nur über den Button „RF Adresse neu lernen“. Pluggit-Adresse ist
+# 00 00 xx xx. Nach dem Lock jede FB-Taste (Aus/1/2/3) drücken und das
+# 32-Byte-Paket in HA Funkpaket 1–4 eintragen.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
@@ -32,9 +32,10 @@
 # Den Ordner components/ mit ins ESPHome-Config-Verzeichnis kopieren
 # (neben diese YAML), oder die GitHub-Quelle unten verwenden.
 #
-# Nach dem Flashen: Log öffnen, Taste an der Original-FB drücken
-# (Modul ~20 cm von der FB). Sensor "Funkadresse" zeigt 00 00 xx xx.
-# Bekannte Adresse fest eintragen:
+# Adresse lernen: Button „RF Adresse neu lernen“, FB ~20 cm am Modul,
+# eine Taste drücken. Sensor "Funkadresse" zeigt 00 00 xx xx (wird im
+# Flash gespeichert). Danach Aus/1/2/3 an der FB drücken und die Pakete
+# in HA eintragen. Optional fest:
 #   rx_address: [0x00, 0x00, 0x0A, 0x7A]
 
 substitutions:
@@ -48,7 +49,7 @@ esphome:
   comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
   project:
     name: pluggit.avent_p_rf
-    version: "1.3.0"
+    version: "1.4.0"
 
 esp32:
   board: esp32dev

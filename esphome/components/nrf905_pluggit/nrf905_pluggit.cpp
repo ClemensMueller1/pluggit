@@ -1,5 +1,6 @@
 #include "nrf905_pluggit.h"
 #include "esphome/core/hal.h"
+#include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 
 #include <cstring>
@@ -25,6 +26,10 @@ void Nrf905Pluggit::setup() {
   delay(5);
 
   this->spi_setup();
+  this->pref_ = global_preferences->make_preference<uint32_t>(fnv1_hash("nrf905_pluggit_addr"), true);
+  this->sniff_mode_ = false;
+  if (!this->address_from_yaml_)
+    this->load_address_();
   this->write_config_();
   if (!this->verify_config_()) {
     ESP_LOGE(TAG, "SPI readback mismatch — check CSN/MOSI/MISO/SCK and 3.3 V");
@@ -41,14 +46,15 @@ void Nrf905Pluggit::setup() {
   this->write_tx_address_();
   this->enter_rx_();
 
-  if (this->sniff_mode_) {
-    ESP_LOGI(TAG, "Sniffing 868.4 MHz (1-byte addr 0x00, CRC off). Press a key on the remote within ~20 cm");
-    if (this->listen_address_ != nullptr)
-      this->listen_address_->publish_state("sniff");
-  } else {
-    ESP_LOGI(TAG, "Listening 868.4 MHz addr %s CRC-16", to_hex_(this->rx_address_, 4).c_str());
+  if (this->has_address_()) {
+    ESP_LOGI(TAG, "Replay 868.4 MHz addr %s CRC-16 (sniff only via RF Adresse neu lernen)",
+             to_hex_(this->rx_address_, 4).c_str());
     if (this->listen_address_ != nullptr)
       this->listen_address_->publish_state(to_hex_(this->rx_address_, 4));
+  } else {
+    ESP_LOGW(TAG, "No ShockBurst address yet — press RF Adresse neu lernen, then store Off/1/2/3 packets in HA");
+    if (this->listen_address_ != nullptr)
+      this->listen_address_->publish_state("unset");
   }
 
   this->set_interval("nrf905_heartbeat", 15000, [this]() { this->log_heartbeat_(); });
@@ -65,9 +71,9 @@ void Nrf905Pluggit::dump_config() {
     LOG_PIN("  CD Pin: ", this->cd_pin_);
   if (this->am_pin_ != nullptr)
     LOG_PIN("  AM Pin: ", this->am_pin_);
-  ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, addr[0]=0x00)" : "locked CRC-16");
-  if (!this->sniff_mode_)
-    ESP_LOGCONFIG(TAG, "  Address: %s", to_hex_(this->rx_address_, 4).c_str());
+  ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, addr[0]=0x00)" : "replay CRC-16");
+  ESP_LOGCONFIG(TAG, "  Address: %s",
+                this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset");
 }
 
 void Nrf905Pluggit::loop() {
@@ -148,6 +154,27 @@ void Nrf905Pluggit::enter_rx_() {
   delay(1);
 }
 
+bool Nrf905Pluggit::has_address_() const {
+  return this->rx_address_[0] != 0 || this->rx_address_[1] != 0 || this->rx_address_[2] != 0 ||
+         this->rx_address_[3] != 0;
+}
+
+void Nrf905Pluggit::save_address_() {
+  uint32_t packed = static_cast<uint32_t>(this->rx_address_[0]) | (static_cast<uint32_t>(this->rx_address_[1]) << 8) |
+                    (static_cast<uint32_t>(this->rx_address_[2]) << 16) | (static_cast<uint32_t>(this->rx_address_[3]) << 24);
+  this->pref_.save(&packed);
+}
+
+void Nrf905Pluggit::load_address_() {
+  uint32_t packed = 0;
+  if (!this->pref_.load(&packed) || packed == 0)
+    return;
+  this->rx_address_[0] = packed & 0xFF;
+  this->rx_address_[1] = (packed >> 8) & 0xFF;
+  this->rx_address_[2] = (packed >> 16) & 0xFF;
+  this->rx_address_[3] = (packed >> 24) & 0xFF;
+}
+
 bool Nrf905Pluggit::looks_like_pluggit_(const uint8_t *buf) const {
   // After matching address byte 0 = 0x00, payload starts with address[1..3]:
   // 00 xx xx | payload. Pluggit uses 00 00 xx xx; payload often 90/80/88.
@@ -163,11 +190,13 @@ void Nrf905Pluggit::lock_address_(const uint8_t *sniff_buf) {
   this->rx_address_[2] = sniff_buf[1];
   this->rx_address_[3] = sniff_buf[2];
   this->sniff_mode_ = false;
+  this->save_address_();
   this->write_config_();
   this->write_tx_address_();
   this->enter_rx_();
   const std::string addr = to_hex_(this->rx_address_, 4);
-  ESP_LOGI(TAG, "Locked ShockBurst address %s (CRC-16). Press the remote again for a full 32-byte frame", addr.c_str());
+  ESP_LOGI(TAG, "Locked ShockBurst address %s (CRC-16). Press each remote key (Aus/1/2/3) and store the packets in HA",
+           addr.c_str());
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state(addr);
 }
@@ -224,11 +253,12 @@ void Nrf905Pluggit::transmit_hex(const std::string &hex) {
   uint8_t buf[NRF_PAYLOAD_LEN] = {0};
   this->parse_hex_(hex, buf, NRF_PAYLOAD_LEN);
 
-  if (this->sniff_mode_) {
-    ESP_LOGW(TAG, "TX skipped: ShockBurst address not locked yet");
+  if (!this->has_address_()) {
+    ESP_LOGW(TAG, "TX skipped: no ShockBurst address — press RF Adresse neu lernen");
     return;
   }
 
+  const bool resume_sniff = this->sniff_mode_;
   this->enter_standby_();
   this->enable();
   this->write_byte(NRF_CMD_WTP);
@@ -239,6 +269,10 @@ void Nrf905Pluggit::transmit_hex(const std::string &hex) {
   this->txe_pin_->digital_write(true);
   this->ce_pin_->digital_write(true);
   delay(20);
+  if (resume_sniff) {
+    this->sniff_mode_ = true;
+    this->write_config_();
+  }
   this->enter_rx_();
   ESP_LOGI(TAG, "TX %s", this->to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
 }
@@ -249,8 +283,12 @@ void Nrf905Pluggit::log_heartbeat_() {
   const int dr = this->dr_pin_ != nullptr && this->dr_pin_->digital_read();
   const int cd = this->cd_pin_ == nullptr ? -1 : this->cd_pin_->digital_read();
   const int am = this->am_pin_ == nullptr ? -1 : this->am_pin_->digital_read();
-  ESP_LOGD(TAG, "waiting 868.4 MHz sniff=%d DR=%d CD=%d AM=%d — press remote, keep module ~20 cm away",
-           this->sniff_mode_, dr, cd, am);
+  if (this->sniff_mode_) {
+    ESP_LOGD(TAG, "sniff 868.4 MHz DR=%d CD=%d AM=%d — press remote within ~20 cm", dr, cd, am);
+  } else {
+    ESP_LOGD(TAG, "replay 868.4 MHz addr=%s DR=%d CD=%d AM=%d",
+             this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset", dr, cd, am);
+  }
 }
 
 std::string Nrf905Pluggit::to_hex_(const uint8_t *data, size_t len) {

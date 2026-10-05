@@ -18,10 +18,12 @@ Quellen: Betriebsanleitung 2011, KNX-User-Forum Thread
   **~20 cm**, bis ein 868-MHz-optimiertes Modul da ist.
 - Die FB sendet nur nach Tastendruck (kein Dauerfunk, Sleep nach 2 min)
 
-Die ESPHome-Komponente startet im Sniff-Modus (1-Byte-Adresse `0x00`,
-CRC aus), erkennt Pluggit-Rahmen am Prefix `00 00` plus Payload `90` /
-`80` / `88`, sperrt dann die gelernte 4-Byte-Adresse und schaltet auf
-CRC-16. Danach Taste erneut drücken für ein vollständiges 32-Byte-Paket.
+Die ESPHome-Komponente startet im Replay-Modus (gespeicherte Adresse,
+CRC-16). Sniff nur über den Button „RF Adresse neu lernen“ (1-Byte-
+Adresse `0x00`, CRC aus). Pluggit-Rahmen: Prefix `00 00` plus Payload
+`90` / `80` / `88`. Nach dem Lock die gelernte Adresse im Flash halten
+und Aus/1/2/3-Pakete in der HA-MQTT-Config ablegen; die Fan-Entität
+sendet sie auf `rf/tx`.
 
 Beispiel-Sniff (Forum):
 

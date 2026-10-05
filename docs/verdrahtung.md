@@ -132,12 +132,9 @@ Gehäuse in Sichtweite der KWL (nicht im Metallschrank).
 | PWR | GPIO17 |
 | DR | GPIO22 |
 
-Beim ersten Sniff die Fernbedienung **etwa 20 cm** vom Modul halten —
-viele 868-MHz-Module haben sehr kurze Reichweite.
-Log: `nRF905 SPI` muss an sein (sonst Verdrahtung CSN/MOSI/MISO/SCK).
-Taste drücken, Sensor **Funkadresse** zeigt `00 00 xx xx`. Danach Taste
-noch einmal für ein volles 32-Byte-Paket.
-
-Die vier Rahmen (Aus, Stufe 1, Stufe 2, Stufe 3) in die HA-Integration
-unter MQTT → Funkpaket 1–4 eintragen. Die Fan-Entität sendet sie auf
-`pluggit_avent/rf/tx`.
+Button **RF Adresse neu lernen** drücken, Fernbedienung **etwa 20 cm**
+vom Modul halten. Log: `nRF905 SPI` muss an sein.
+Taste drücken, Sensor **Funkadresse** zeigt `00 00 xx xx` (wird
+gespeichert). Danach Aus / Stufe 1 / 2 / 3 an der FB drücken und die
+vier 32-Byte-Rahmen in HA unter MQTT → Funkpaket 1–4 eintragen.
+Die Fan-Entität sendet sie auf `pluggit_avent/rf/tx`.
