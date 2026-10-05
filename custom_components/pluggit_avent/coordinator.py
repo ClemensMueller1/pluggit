@@ -8,9 +8,14 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
-from homeassistant.components.mqtt import async_publish, async_subscribe
+from homeassistant.components.mqtt import (
+    async_publish,
+    async_subscribe,
+    async_wait_for_mqtt_client,
+)
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, State, callback
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -133,6 +138,8 @@ class PluggitCoordinator(DataUpdateCoordinator[PluggitData]):
                 )
             )
         else:
+            if not await async_wait_for_mqtt_client(self.hass):
+                raise ConfigEntryNotReady("MQTT is not set up yet")
             await self._async_subscribe_mqtt()
         await self.async_refresh()
 
