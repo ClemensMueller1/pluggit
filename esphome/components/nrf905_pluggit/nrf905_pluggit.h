@@ -55,11 +55,17 @@ class Nrf905Pluggit : public Component,
   void transmit_hex(const std::string &hex);
   void start_sniff();
   void set_address_hex(const std::string &hex);
+  void transmit_test(const std::string &message);
+  void test_listen(const std::string &command);
 
  protected:
   void enter_standby_();
   void write_config_();
   void write_tx_address_();
+  void write_tx_address_bytes_(const uint8_t *addr);
+  bool program_test_radio_();
+  void leave_test_();
+  static void fill_test_payload_(const std::string &message, uint8_t *out);
   bool verify_config_();
   void enter_rx_();
   void read_payload_();
@@ -86,6 +92,7 @@ class Nrf905Pluggit : public Component,
   std::vector<Trigger<std::string> *> on_packet_;
 
   bool sniff_mode_{false};
+  bool test_mode_{false};
   bool address_from_yaml_{false};
   bool nvm_valid_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};
@@ -121,6 +128,26 @@ template<typename... Ts> class Nrf905SetAddressAction : public Action<Ts...> {
   explicit Nrf905SetAddressAction(Nrf905Pluggit *parent) : parent_(parent) {}
   TEMPLATABLE_VALUE(std::string, data)
   void play(const Ts &...x) override { this->parent_->set_address_hex(this->data_.value(x...)); }
+
+ protected:
+  Nrf905Pluggit *parent_;
+};
+
+template<typename... Ts> class Nrf905TransmitTestAction : public Action<Ts...> {
+ public:
+  explicit Nrf905TransmitTestAction(Nrf905Pluggit *parent) : parent_(parent) {}
+  TEMPLATABLE_VALUE(std::string, data)
+  void play(const Ts &...x) override { this->parent_->transmit_test(this->data_.value(x...)); }
+
+ protected:
+  Nrf905Pluggit *parent_;
+};
+
+template<typename... Ts> class Nrf905TestListenAction : public Action<Ts...> {
+ public:
+  explicit Nrf905TestListenAction(Nrf905Pluggit *parent) : parent_(parent) {}
+  TEMPLATABLE_VALUE(std::string, data)
+  void play(const Ts &...x) override { this->parent_->test_listen(this->data_.value(x...)); }
 
  protected:
   Nrf905Pluggit *parent_;

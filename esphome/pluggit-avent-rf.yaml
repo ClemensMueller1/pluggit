@@ -12,6 +12,14 @@
 # der HA-Config (ShockBurst-Adresse) und kann dort gesetzt werden;
 # HA sendet sie auf rf/address/set, der ESP speichert sie im NVM.
 #
+# Link-Test zweier Module (NVM und gelernte Adresse werden nicht benutzt):
+#   {prefix}/rf/test   listen (oder leer) = Empfang, off = Replay zurück
+#   {prefix}/tx/test   Payload senden (Text oder Hex, leer = Testmuster)
+# Beide Seiten programmieren dasselbe Registerbild:
+#   76 0E 44 20 20 54 45 53 54 D8
+#   868,4 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
+# Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
+#
 # Hardware:
 #   ESP32-DevKit (3,3 V)
 #   nRF905-Modul 868 MHz (PTR8000+ / NF905SE, SMA-Antenne)
@@ -52,7 +60,7 @@ esphome:
   comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
   project:
     name: pluggit.avent_p_rf
-    version: "1.4.1"
+    version: "1.5.0-test"
 
 esp32:
   board: esp32dev
@@ -120,6 +128,16 @@ mqtt:
             topic: ${mqtt_prefix}/rf/address
             payload: !lambda "return id(nrf_address).state;"
             retain: true
+    - topic: ${mqtt_prefix}/rf/test
+      then:
+        - nrf905_pluggit.test_listen:
+            id: nrf
+            data: !lambda "return x;"
+    - topic: ${mqtt_prefix}/tx/test
+      then:
+        - nrf905_pluggit.transmit_test:
+            id: nrf
+            data: !lambda "return x;"
 
 spi:
   clk_pin: GPIO18
