@@ -5,7 +5,7 @@
  * MQTT: veröffentlicht jedes empfangene 32-Byte-Paket und
  * akzeptiert Replay-Payloads auf pluggit_avent/rf/tx
  *
- * SPI: SCK=18 MOSI=23 MISO=19 CSN=5 CE=4 TXE=16 PWR=17 DR=22
+ * SPI: SCK=18 MOSI=23 MISO=19 CSN=5 CE=21 TXE=16 PWR=17 DR=22
  *
  * Config: 868.4 MHz (HFREQ_PLL=1 → Byte1 0x0E, nicht 0x0C).
  * Boot im Sniff (1-Byte-Adresse 0x00, CRC aus). Pluggit-Adresse ist
@@ -27,7 +27,7 @@ const char *MQTT_TX = "pluggit_avent/rf/tx";
 const char *MQTT_AVAIL = "pluggit_avent/availability";
 
 const uint8_t PIN_CS = 5;
-const uint8_t PIN_CE = 4;
+const uint8_t PIN_CE = 21;
 const uint8_t PIN_TXE = 16;
 const uint8_t PIN_PWR = 17;
 const uint8_t PIN_DR = 22;

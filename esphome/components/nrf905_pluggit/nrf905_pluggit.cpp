@@ -100,10 +100,11 @@ void Nrf905Pluggit::write_config_() {
       0x76, 0x0E, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8,
   };
   if (this->sniff_mode_) {
-    // Pluggit ShockBurst address is 00 00 xx xx (KNX forum #218). Match the
-    // first byte, CRC off, so the remaining address lands in the payload.
+    // Match one address byte, CRC off, so the other three address bytes land
+    // in the payload. Link-test frames start with 0x54, not the Pluggit 0x00,
+    // and a CRC-16 transmitter is still delivered when the receiver's CRC is off.
     cfg[2] = 0x41;  // TX_AFW=4, RX_AFW=1
-    cfg[5] = 0x00;
+    cfg[5] = this->sniff_prefix_;
     cfg[9] = 0x18;  // 16 MHz crystal, CRC disabled
   } else {
     cfg[2] = 0x44;  // TX_AFW=4, RX_AFW=4
@@ -315,16 +316,30 @@ void Nrf905Pluggit::read_payload_() {
   }
 
   if (this->sniff_mode_) {
-    if (!this->looks_like_pluggit_(buf)) {
-      const uint32_t now = millis();
-      if (now - this->last_noise_ms_ > 1000) {
-        this->last_noise_ms_ = now;
-        ESP_LOGD(TAG, "RX noise %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+    // tx/test address is 54 45 53 54. With a 1-byte match on 0x54 the RX
+    // buffer starts with 45 53 54 and then the 32-byte payload.
+    const bool link_test = this->sniff_prefix_ == 0x54 && buf[0] == 0x45 && buf[1] == 0x53 && buf[2] == 0x54;
+    if (link_test) {
+      char text[30];
+      size_t n = 0;
+      for (size_t i = 3; i < NRF_PAYLOAD_LEN && n + 1 < sizeof(text); i++) {
+        const uint8_t c = buf[i];
+        if (c == 0)
+          break;
+        text[n++] = (c >= 32 && c < 127) ? static_cast<char>(c) : '.';
       }
+      text[n] = '\0';
+      ESP_LOGI(TAG, "SNIFF ShockBurst address 54 45 53 54 message \"%s\"", text);
+      if (this->listen_address_ != nullptr)
+        this->listen_address_->publish_state("54 45 53 54");
+      this->publish_packet_(buf, NRF_PAYLOAD_LEN);
       return;
     }
-    this->publish_packet_(buf, NRF_PAYLOAD_LEN);
-    this->lock_address_(buf);
+    const uint32_t now = millis();
+    if (now - this->last_noise_ms_ > 1000) {
+      this->last_noise_ms_ = now;
+      ESP_LOGD(TAG, "RX noise %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+    }
     return;
   }
 
@@ -345,11 +360,14 @@ void Nrf905Pluggit::publish_packet_(const uint8_t *buf, size_t len) {
 void Nrf905Pluggit::start_sniff() {
   this->test_mode_ = false;
   this->sniff_mode_ = true;
+  // Stay on the link-test prefix. Matching 0x00 here only hears unrelated
+  // traffic and used to lock a random address before tx/test could arrive.
+  this->sniff_prefix_ = 0x54;
   this->write_config_();
   this->enter_rx_();
-  ESP_LOGI(TAG, "Sniff mode — press a key on the remote within ~20 cm");
+  ESP_LOGI(TAG, "Sniff CRC off, match byte 0x54. tx/test shows address 54 45 53 54. Noise is not locked.");
   if (this->listen_address_ != nullptr)
-    this->listen_address_->publish_state("sniff");
+    this->listen_address_->publish_state("sniff 54");
   if (this->rf_rx_ != nullptr)
     this->rf_rx_->publish_state(false);
 }
@@ -445,17 +463,21 @@ void Nrf905Pluggit::transmit_test(const std::string &message) {
   if (!this->program_test_radio_())
     return;
 
-  this->enter_standby_();
-  this->enable();
-  this->write_byte(NRF_CMD_WTP);
-  this->write_array(buf, NRF_PAYLOAD_LEN);
-  this->disable();
-  this->write_tx_address_bytes_(TEST_CFG + 5);
-
-  this->txe_pin_->digital_write(true);
-  this->ce_pin_->digital_write(true);
-  delay(20);
-  this->enter_rx_();
+  // A few copies so a sniffer that has just switched config still catches one.
+  for (int i = 0; i < 4; i++) {
+    this->enter_standby_();
+    this->enable();
+    this->write_byte(NRF_CMD_WTP);
+    this->write_array(buf, NRF_PAYLOAD_LEN);
+    this->disable();
+    this->write_tx_address_bytes_(TEST_CFG + 5);
+    this->txe_pin_->digital_write(true);
+    this->ce_pin_->digital_write(true);
+    delay(20);
+    this->enter_rx_();
+    if (i + 1 < 4)
+      delay(40);
+  }
   ESP_LOGI(TAG, "TEST TX %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
 }
 
@@ -468,7 +490,8 @@ void Nrf905Pluggit::log_heartbeat_() {
   if (this->test_mode_) {
     ESP_LOGD(TAG, "TEST listen 868.4 MHz addr 54 45 53 54 CRC-16 DR=%d CD=%d AM=%d", dr, cd, am);
   } else if (this->sniff_mode_) {
-    ESP_LOGD(TAG, "sniff 868.4 MHz DR=%d CD=%d AM=%d — press remote within ~20 cm", dr, cd, am);
+    ESP_LOGD(TAG, "sniff 868.4 MHz prefix %02X CRC off DR=%d CD=%d AM=%d — waiting for tx/test",
+             this->sniff_prefix_, dr, cd, am);
   } else {
     ESP_LOGD(TAG, "replay 868.4 MHz addr=%s DR=%d CD=%d AM=%d",
              this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset", dr, cd, am);

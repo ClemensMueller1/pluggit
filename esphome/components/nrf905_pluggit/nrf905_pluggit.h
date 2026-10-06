@@ -93,6 +93,8 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool test_mode_{false};
+  // 1-byte match while CRC is off. 0x54 is the link-test address prefix.
+  uint8_t sniff_prefix_{0x54};
   bool address_from_yaml_{false};
   bool nvm_valid_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};

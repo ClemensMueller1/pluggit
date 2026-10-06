@@ -127,7 +127,7 @@ Gehäuse in Sichtweite der KWL (nicht im Metallschrank).
 | MISO / SO | GPIO19 |
 | SCK | GPIO18 |
 | CSN | GPIO5 |
-| CE | GPIO4 |
+| CE | GPIO21 |
 | TXE | GPIO16 |
 | PWR | GPIO17 |
 | DR | GPIO22 |
