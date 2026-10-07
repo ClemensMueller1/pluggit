@@ -41,10 +41,8 @@
 #   GPIO22 → DR (Data Ready, nicht GPIO15: Strapping-Pin)
 #   optional CD / AM des Moduls an freie GPIOs (Diagnose)
 #
-# ESPHome 2026.3+: custom_component ist entfernt. Die Komponente liegt
-# als External Component in ./components/nrf905_pluggit/.
-# Den Ordner components/ mit ins ESPHome-Config-Verzeichnis kopieren
-# (neben diese YAML), oder die GitHub-Quelle unten verwenden.
+# ESPHome 2026.3+: custom_component ist entfernt. Die Komponente kommt
+# von github://ClemensMueller1/pluggit@nrf905test (esphome/components/).
 #
 # Adresse lernen: Button „RF Adresse neu lernen“, FB ~20 cm am Modul,
 # eine Taste drücken. Sensor "Funkadresse" zeigt 00 00 xx xx (wird im
@@ -70,14 +68,16 @@ esp32:
   framework:
     type: arduino
 
-# Lokal (YAML und components/ im selben Ordner) oder vom GitHub-Repo.
+# GitHub-Quelle (HA braucht nur diese YAML). refresh 0s, damit der
+# Test-Branch nicht einen Tag lang gecacht bleibt.
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://ClemensMueller1/pluggit@nrf905test
+    refresh: 0s
     components: [nrf905_pluggit]
-  # Alternative, wenn nur die YAML in HA liegt:
-  # - source: github://ClemensMueller1/pluggit@main
+  # Lokal, wenn YAML und components/ im selben Ordner liegen:
+  # - source:
+  #     type: local
+  #     path: components
   #   components: [nrf905_pluggit]
 
 logger:
