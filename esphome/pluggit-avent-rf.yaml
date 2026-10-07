@@ -13,8 +13,8 @@
 # HA sendet sie auf rf/address/set, der ESP speichert sie im NVM.
 #
 # Link-Test zweier Module (NVM und gelernte Adresse werden nicht benutzt):
-#   {prefix}/rf/test   listen (oder leer) = Empfang, off = Replay zurück
-#   {prefix}/tx/test   Payload senden (Text oder Hex, leer = Testmuster)
+#   {prefix}/rx/test   Empfang (leer oder listen), off = Replay zurück
+#   {prefix}/tx/test   Senden (Text oder Hex, leer = Testmuster)
 # Beide Seiten programmieren dasselbe Registerbild:
 #   76 0E 44 20 20 54 45 53 54 D8
 #   868,4 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
@@ -63,7 +63,7 @@ esphome:
   comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
   project:
     name: pluggit.avent_p_rf
-    version: "1.5.2-test"
+    version: "1.5.3-test"
 
 esp32:
   board: esp32dev
@@ -131,7 +131,7 @@ mqtt:
             topic: ${mqtt_prefix}/rf/address
             payload: !lambda "return id(nrf_address).state;"
             retain: true
-    - topic: ${mqtt_prefix}/rf/test
+    - topic: ${mqtt_prefix}/rx/test
       then:
         - nrf905_pluggit.test_listen:
             id: nrf

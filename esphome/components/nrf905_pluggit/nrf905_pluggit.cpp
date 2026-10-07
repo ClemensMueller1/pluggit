@@ -450,7 +450,7 @@ void Nrf905Pluggit::test_listen(const std::string &command) {
   if (!this->program_test_radio_())
     return;
   this->enter_rx_();
-  ESP_LOGI(TAG, "TEST listen — publish tx/test on the other module (addr 54 45 53 54, CRC-16)");
+  ESP_LOGI(TAG, "TEST listen on rx/test — other module publishes tx/test (addr 54 45 53 54, CRC-16)");
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state("54 45 53 54");
   if (this->rf_rx_ != nullptr)
