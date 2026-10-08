@@ -4,10 +4,10 @@
   "codeowners": [],
   "after_dependencies": ["mqtt"],
   "config_flow": true,
-  "documentation": "https://github.com/clemens/pluggit-avent",
+  "documentation": "https://github.com/ClemensMueller1/pluggit/blob/v1.1.2/CHANGELOG.md",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/clemens/pluggit-avent/issues",
+  "issue_tracker": "https://github.com/ClemensMueller1/pluggit/issues",
   "requirements": [],
   "version": "1.1.2"
 }

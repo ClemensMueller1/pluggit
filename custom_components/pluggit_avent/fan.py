@@ -16,6 +16,7 @@ from .const import (
     DEFAULT_NAME,
     DOMAIN,
     FanStage,
+    device_info,
     MODE_ANALOG,
     MODE_MQTT,
     MODE_RELAY,
@@ -53,12 +54,7 @@ class PluggitFan(CoordinatorEntity[PluggitCoordinator], FanEntity):
             CONF_DEVICE_NAME, entry.data.get(CONF_DEVICE_NAME, DEFAULT_NAME)
         )
         self._attr_unique_id = f"{entry.entry_id}_fan"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": name,
-            "manufacturer": "Pluggit",
-            "model": "Avent P / P300 / P450",
-        }
+        self._attr_device_info = device_info(entry.entry_id, name)
         mode = coordinator.mode
         if mode == MODE_ANALOG:
             presets = list(PRESET_MODES_ANALOG)

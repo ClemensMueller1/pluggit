@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_NAME,
     DOMAIN,
     FanStage,
+    device_info,
     MODE_MQTT,
     PRESET_OFF,
     STAGE_TO_PRESET,
@@ -124,12 +125,7 @@ class PluggitSensor(CoordinatorEntity[PluggitCoordinator], SensorEntity):
             CONF_DEVICE_NAME, entry.data.get(CONF_DEVICE_NAME, DEFAULT_NAME)
         )
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": name,
-            "manufacturer": "Pluggit",
-            "model": "Avent P / P300 / P450",
-        }
+        self._attr_device_info = device_info(entry.entry_id, name)
 
     @property
     def native_value(self) -> float | str | None:

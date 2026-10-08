@@ -6,6 +6,11 @@ from enum import IntEnum
 from typing import Final
 
 DOMAIN: Final = "pluggit_avent"
+VERSION: Final = "1.1.2"
+RELEASE_TAG: Final = f"v{VERSION}"
+REPO_URL: Final = "https://github.com/ClemensMueller1/pluggit"
+CHANGELOG_URL: Final = f"{REPO_URL}/blob/{RELEASE_TAG}/CHANGELOG.md"
+RELEASE_URL: Final = f"{REPO_URL}/releases/tag/{RELEASE_TAG}"
 
 CONF_MODE: Final = "mode"
 CONF_SWITCH_STAGE1: Final = "switch_stage1"
@@ -68,6 +73,19 @@ MQTT_AVAILABILITY: Final = "availability"
 
 DEFAULT_MQTT_PREFIX: Final = "pluggit_avent"
 DEFAULT_NAME: Final = "Pluggit Avent P"
+
+
+def device_info(entry_id: str, name: str) -> dict:
+    """Device registry entry. Links the integration version to the release."""
+    return {
+        "identifiers": {(DOMAIN, entry_id)},
+        "name": name,
+        "manufacturer": "Pluggit",
+        "model": "Avent P / P300 / P450",
+        "sw_version": VERSION,
+        "configuration_url": RELEASE_URL,
+    }
+
 
 # Set by the config/options flow when the user saved a ShockBurst address.
 # The coordinator consumes the marker once and publishes rf/address/set.
