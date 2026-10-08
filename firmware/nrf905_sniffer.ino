@@ -1,13 +1,13 @@
 /*
- * Pluggit Avent P — nRF905 868,4-MHz-Sniffer / Replay
+ * Pluggit Avent P — nRF905 433,0-MHz-Test
  *
- * Hardware: ESP32-DevKit + nRF905 868-MHz-Modul (3,3 V)
+ * Hardware: ESP32-DevKit + nRF905-Modul für 433 MHz (3,3 V)
  * MQTT: veröffentlicht jedes empfangene 32-Byte-Paket und
  * akzeptiert Replay-Payloads auf pluggit_avent/rf/tx
  *
  * SPI: SCK=18 MOSI=23 MISO=19 CSN=5 CE=21 TXE=16 PWR=17 DR=22
  *
- * Config: 868.4 MHz (HFREQ_PLL=1 → Byte1 0x0E, nicht 0x0C).
+ * Config: 433.0 MHz (HFREQ_PLL=0, CH_NO=0x6A, Byte1 0x0C).
  * Boot im Sniff (1-Byte-Adresse 0x00, CRC aus). Pluggit-Adresse ist
  * 00 00 xx xx. Nach dem ersten Treffer Lock auf CRC-16.
  */
@@ -54,8 +54,8 @@ void nrfStandby() {
 }
 
 void nrfConfig() {
-  // 0x0E: PA +10 dBm, HFREQ_PLL=1 → 868.4 MHz (0x0C wäre 434.2 MHz)
-  uint8_t cfg[10] = {0x76, 0x0E, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8};
+  // 0x0C: PA +10 dBm, HFREQ_PLL=0. CH_NO=0x6A → 422.4 + 10.6 = 433.0 MHz.
+  uint8_t cfg[10] = {0x6A, 0x0C, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8};
   if (sniffMode) {
     cfg[2] = 0x41;  // RX address width 1
     cfg[5] = 0x00;
@@ -176,7 +176,7 @@ void setup() {
   }
   nrfWriteTxAddr();
   nrfRxMode();
-  Serial.println("Sniffing 868.4 MHz, press remote within ~20 cm");
+  Serial.println("Sniffing 433.0 MHz");
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);

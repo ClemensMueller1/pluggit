@@ -1,7 +1,8 @@
-# Pluggit Avent P — nRF905-Funksniffer / Fernbedienungs-Ersatz (868,4 MHz)
+# Pluggit Avent P — nRF905-Testbranch 433,0 MHz (nicht die Pluggit-FB)
 #
-# Die Original-Fernbedienung DTH-029255-04 nutzt einen Nordic nRF905
-# auf 868,4 MHz (KNX-User-Forum, Beitrag #218).
+# Die Fernbedienung DTH-029255-04 sendet auf 868,4 MHz. Dieser Branch
+# stellt den nRF905 auf 433,0 MHz (HFREQ_PLL=0, CH_NO=106 / 0x6A,
+# Byte 1 = 0x0C).
 #
 # Boot: Replay mit gespeicherter ShockBurst-Adresse (CRC-16). Das Log
 # zeigt „NVM ShockBurst address: …“. Fan Aus/1/2/3 sendet die vier
@@ -16,8 +17,8 @@
 #   {prefix}/rx/test   Empfang (leer oder listen), off = Replay zurück
 #   {prefix}/tx/test   Senden (Text oder Hex, leer = Testmuster)
 # Beide Seiten programmieren dasselbe Registerbild:
-#   76 0E 44 20 20 54 45 53 54 D8
-#   868,4 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
+#   6A 0C 44 20 20 54 45 53 54 D8
+#   433,0 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
 # Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
 # Sniff (Button „RF Adresse neu lernen“) hört in diesem Test auf Präfix
 # 0x54 mit CRC aus und loggt „SNIFF ShockBurst address 54 45 53 54“.
@@ -25,8 +26,7 @@
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
-#   nRF905-Modul 868 MHz (PTR8000+ / NF905SE, SMA-Antenne)
-#   Billige 868-Module haben oft nur ~20 cm Reichweite — FB dicht halten.
+#   nRF905-Modul im 433-MHz-Band (PTR8000+ / NF905SE, Antenne für 433 MHz)
 #
 # SPI-Verdrahtung ESP32 → nRF905:
 #   3V3  → VCC     (niemals 5 V)
@@ -42,7 +42,7 @@
 #   optional CD / AM des Moduls an freie GPIOs (Diagnose)
 #
 # ESPHome 2026.3+: custom_component ist entfernt. Die Komponente kommt
-# von github://ClemensMueller1/pluggit@v1.1.2 (esphome/components/).
+# von github://ClemensMueller1/pluggit@433mhz-test (esphome/components/).
 #
 # Adresse lernen: Button „RF Adresse neu lernen“, FB ~20 cm am Modul,
 # eine Taste drücken. Sensor "Funkadresse" zeigt 00 00 xx xx (wird im
@@ -58,19 +58,20 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: nRF905 868.4 MHz Sniffer für Pluggit DTH-029255-04
+  comment: nRF905 433.0 MHz test build
   project:
     name: pluggit.avent_p_rf
-    version: "1.5.3-test"
+    version: "1.6.0-433"
 
 esp32:
   board: esp32dev
   framework:
     type: arduino
 
-# GitHub-Release der Integration (manifest version 1.1.2).
+# Dieser Test-Branch. refresh 0s, damit der Frequenzwechsel nicht
+# aus dem Cache von v1.1.2 (868,4 MHz) kommt.
 external_components:
-  - source: github://ClemensMueller1/pluggit@v1.1.2
+  - source: github://ClemensMueller1/pluggit@433mhz-test
     refresh: 0s
     components: [nrf905_pluggit]
   # Lokal, wenn YAML und components/ im selben Ordner liegen:

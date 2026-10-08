@@ -46,7 +46,7 @@ void Nrf905Pluggit::setup() {
   this->enter_rx_();
 
   if (this->has_address_()) {
-    ESP_LOGI(TAG, "Replay 868.4 MHz addr %s CRC-16 (sniff only via RF Adresse neu lernen)",
+    ESP_LOGI(TAG, "Replay 433.0 MHz addr %s CRC-16 (sniff only via RF Adresse neu lernen)",
              to_hex_(this->rx_address_, 4).c_str());
     if (this->listen_address_ != nullptr)
       this->listen_address_->publish_state(to_hex_(this->rx_address_, 4));
@@ -60,7 +60,7 @@ void Nrf905Pluggit::setup() {
 }
 
 void Nrf905Pluggit::dump_config() {
-  ESP_LOGCONFIG(TAG, "nRF905 Pluggit (868.4 MHz):");
+  ESP_LOGCONFIG(TAG, "nRF905 Pluggit (433.0 MHz):");
   LOG_PIN("  CS Pin: ", this->cs_);
   LOG_PIN("  CE Pin: ", this->ce_pin_);
   LOG_PIN("  TXE Pin: ", this->txe_pin_);
@@ -75,7 +75,7 @@ void Nrf905Pluggit::dump_config() {
                 this->nvm_valid_ ? to_hex_(this->nvm_address_, 4).c_str() : "unset");
   ESP_LOGCONFIG(TAG, "  Address: %s",
                 this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset");
-  ESP_LOGCONFIG(TAG, "  Link test: addr 54 45 53 54 CRC-16 cfg 76 0E 44 20 20 54 45 53 54 D8");
+  ESP_LOGCONFIG(TAG, "  Link test: addr 54 45 53 54 CRC-16 cfg 6A 0C 44 20 20 54 45 53 54 D8");
 }
 
 void Nrf905Pluggit::loop() {
@@ -93,11 +93,12 @@ void Nrf905Pluggit::enter_standby_() {
 }
 
 void Nrf905Pluggit::write_config_() {
-  // Byte 0 CH_NO=0x76 (118). Byte 1 MUST have HFREQ_PLL=1 for 868 MHz:
-  //   f = (422.4 + 11.8) * 2 = 868.4 MHz. 0x0C is 434.2 MHz (HFREQ_PLL=0).
-  //   0x0E = PA_PWR=+10 dBm, HFREQ_PLL=1, CH_NO[8]=0.
+  // 433.0 MHz band: HFREQ_PLL=0, CH_NO=106 (0x6A).
+  //   f = 422.4 + CH_NO/10 = 422.4 + 10.6 = 433.0 MHz.
+  //   Byte 1 0x0C = PA_PWR=+10 dBm, HFREQ_PLL=0, CH_NO[8]=0.
+  //   0x0E with CH_NO=0x76 is the 868.4 MHz setting (HFREQ_PLL=1).
   uint8_t cfg[10] = {
-      0x76, 0x0E, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8,
+      0x6A, 0x0C, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8,
   };
   if (this->sniff_mode_) {
     // Match one address byte, CRC off, so the other three address bytes land
@@ -136,7 +137,7 @@ void Nrf905Pluggit::write_tx_address_() { this->write_tx_address_bytes_(this->rx
 // One register image for both test radios. RX address bytes and the TX
 // address written afterwards are the same array, so the two modules cannot
 // disagree on address width, CRC, channel, or payload length.
-static const uint8_t TEST_CFG[10] = {0x76, 0x0E, 0x44, 0x20, 0x20, 0x54, 0x45, 0x53, 0x54, 0xD8};
+static const uint8_t TEST_CFG[10] = {0x6A, 0x0C, 0x44, 0x20, 0x20, 0x54, 0x45, 0x53, 0x54, 0xD8};
 
 bool Nrf905Pluggit::program_test_radio_() {
   if (this->is_failed()) {
@@ -153,12 +154,12 @@ bool Nrf905Pluggit::program_test_radio_() {
   this->disable();
   if (!this->verify_config_()) {
     this->test_mode_ = false;
-    ESP_LOGE(TAG, "TEST config readback mismatch — check SPI, both modules must show cfg 76 0E 44 20 20 54 45 53 54 D8");
+    ESP_LOGE(TAG, "TEST config readback mismatch — check SPI, both modules must show cfg 6A 0C 44 20 20 54 45 53 54 D8");
     return false;
   }
   this->write_tx_address_bytes_(TEST_CFG + 5);
   this->test_mode_ = true;
-  ESP_LOGI(TAG, "TEST radio cfg %s (868.4 MHz, addr 54 45 53 54, AFW 4/4, PW 32, CRC-16)",
+  ESP_LOGI(TAG, "TEST radio cfg %s (433.0 MHz, addr 54 45 53 54, AFW 4/4, PW 32, CRC-16)",
            to_hex_(TEST_CFG, sizeof(TEST_CFG)).c_str());
   return true;
 }
@@ -488,12 +489,12 @@ void Nrf905Pluggit::log_heartbeat_() {
   const int cd = this->cd_pin_ == nullptr ? -1 : this->cd_pin_->digital_read();
   const int am = this->am_pin_ == nullptr ? -1 : this->am_pin_->digital_read();
   if (this->test_mode_) {
-    ESP_LOGD(TAG, "TEST listen 868.4 MHz addr 54 45 53 54 CRC-16 DR=%d CD=%d AM=%d", dr, cd, am);
+    ESP_LOGD(TAG, "TEST listen 433.0 MHz addr 54 45 53 54 CRC-16 DR=%d CD=%d AM=%d", dr, cd, am);
   } else if (this->sniff_mode_) {
-    ESP_LOGD(TAG, "sniff 868.4 MHz prefix %02X CRC off DR=%d CD=%d AM=%d — waiting for tx/test",
+    ESP_LOGD(TAG, "sniff 433.0 MHz prefix %02X CRC off DR=%d CD=%d AM=%d — waiting for tx/test",
              this->sniff_prefix_, dr, cd, am);
   } else {
-    ESP_LOGD(TAG, "replay 868.4 MHz addr=%s DR=%d CD=%d AM=%d",
+    ESP_LOGD(TAG, "replay 433.0 MHz addr=%s DR=%d CD=%d AM=%d",
              this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset", dr, cd, am);
   }
 }
