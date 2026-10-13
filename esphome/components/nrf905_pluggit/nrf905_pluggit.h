@@ -70,7 +70,10 @@ class Nrf905Pluggit : public Component,
   void enter_rx_();
   void read_payload_();
   bool has_address_() const;
-  void lock_address_(const uint8_t *sniff_buf);
+  void tune_sniff_(uint8_t hi, uint8_t lo);
+  void sniff_tick_();
+  void lock_tuned_address_();
+  void stop_sniff_();
   void save_address_();
   void load_address_();
   void publish_packet_(const uint8_t *buf, size_t len);
@@ -92,21 +95,17 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool test_mode_{false};
-  // Sniff matches one address byte 0x00. The next three payload bytes are
-  // the rest of a candidate address; lock the one seen more than 10 times.
-  static constexpr uint8_t SNIFF_SLOTS = 8;
-  uint8_t sniff_slot_addr_[8][3]{};
-  uint8_t sniff_slot_count_[8]{};
-  bool sniff_slot_used_[8]{};
-  uint32_t sniff_started_ms_{0};
-  bool sniff_heard_{false};
-  bool sniff_silent_logged_{false};
+  // CRC-16 scan of 00 00 xx xx. TEST listens on 00 00 12 34, then SCAN walks the rest.
+  enum class SniffPhase : uint8_t { TEST, SCAN };
+  SniffPhase sniff_phase_{SniffPhase::TEST};
+  uint16_t sniff_index_{0};
+  uint32_t sniff_deadline_ms_{0};
+  uint32_t sniff_dwell_ms_{0};
   bool address_from_yaml_{false};
   bool nvm_valid_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};
   uint8_t nvm_address_[4]{0x00, 0x00, 0x00, 0x00};
   uint8_t last_cfg_[10]{};
-  uint32_t last_noise_ms_{0};
   ESPPreferenceObject pref_{};
 };
 

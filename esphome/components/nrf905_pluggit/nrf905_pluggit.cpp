@@ -81,10 +81,9 @@ void Nrf905Pluggit::dump_config() {
 void Nrf905Pluggit::loop() {
   if (this->is_failed() || this->dr_pin_ == nullptr)
     return;
-  if (this->sniff_mode_ && !this->sniff_heard_ && !this->sniff_silent_logged_ &&
-      millis() - this->sniff_started_ms_ > 10000) {
-    this->sniff_silent_logged_ = true;
-    ESP_LOGW(TAG, "SNIFF 10 s with no frame. Hold the Pluggit remote within ~20 cm and press a key.");
+  if (this->sniff_mode_) {
+    this->sniff_tick_();
+    return;
   }
   if (!this->dr_pin_->digital_read())
     return;
@@ -101,23 +100,12 @@ void Nrf905Pluggit::write_config_() {
   // 868.4 MHz: HFREQ_PLL=1, CH_NO=118 (0x76).
   //   f = (422.4 + 11.8) * 2 = 868.4 MHz.
   //   Byte 1 0x0E = PA_PWR=+10 dBm, HFREQ_PLL=1, CH_NO[8]=0.
+  // Replay, link test, and sniff all use CRC-16 and a 4-byte address.
+  // Sniff only changes which address is written into bytes 5..8.
   uint8_t cfg[10] = {
-      0x76, 0x0E, 0x44, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00, 0xD8,
+      0x76, 0x0E, 0x44, 0x20, 0x20, this->rx_address_[0], this->rx_address_[1], this->rx_address_[2],
+      this->rx_address_[3], 0xD8,
   };
-  if (this->sniff_mode_) {
-    // Same 868.4 MHz channel. Match only the first address byte 0x00 and
-    // turn CRC off so the other three address bytes land in the payload.
-    cfg[2] = 0x41;  // TX_AFW=4, RX_AFW=1
-    cfg[5] = 0x00;
-    cfg[9] = 0x18;  // 16 MHz crystal, CRC disabled
-  } else {
-    cfg[2] = 0x44;  // TX_AFW=4, RX_AFW=4
-    cfg[5] = this->rx_address_[0];
-    cfg[6] = this->rx_address_[1];
-    cfg[7] = this->rx_address_[2];
-    cfg[8] = this->rx_address_[3];
-    cfg[9] = 0xD8;  // 16 MHz crystal, CRC-16
-  }
   memcpy(this->last_cfg_, cfg, sizeof(cfg));
 
   this->enter_standby_();
@@ -277,22 +265,71 @@ void Nrf905Pluggit::load_address_() {
   memcpy(this->rx_address_, this->nvm_address_, 4);
 }
 
-void Nrf905Pluggit::lock_address_(const uint8_t *sniff_buf) {
-  // sniff_buf[0..2] follow the matched address byte 0x00.
+void Nrf905Pluggit::tune_sniff_(uint8_t hi, uint8_t lo) {
   this->rx_address_[0] = 0x00;
-  this->rx_address_[1] = sniff_buf[0];
-  this->rx_address_[2] = sniff_buf[1];
-  this->rx_address_[3] = sniff_buf[2];
+  this->rx_address_[1] = 0x00;
+  this->rx_address_[2] = hi;
+  this->rx_address_[3] = lo;
+  this->write_config_();
+  this->enter_rx_();
+  this->sniff_dwell_ms_ = millis();
+}
+
+void Nrf905Pluggit::lock_tuned_address_() {
   this->sniff_mode_ = false;
   this->save_address_();
   this->write_config_();
   this->write_tx_address_();
   this->enter_rx_();
   const std::string addr = to_hex_(this->rx_address_, 4);
-  ESP_LOGI(TAG, "Locked ShockBurst address %s (868.4 MHz, CRC-16). Press each remote key (Aus/1/2/3) and store the packets in HA",
-           addr.c_str());
+  ESP_LOGI(TAG, "SNIFF locked %s (868.4 MHz, CRC-16)", addr.c_str());
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state(addr);
+}
+
+void Nrf905Pluggit::stop_sniff_() {
+  this->sniff_mode_ = false;
+  if (this->nvm_valid_)
+    memcpy(this->rx_address_, this->nvm_address_, 4);
+  else
+    memset(this->rx_address_, 0, 4);
+  this->write_config_();
+  this->write_tx_address_();
+  this->enter_rx_();
+  const std::string shown = this->has_address_() ? to_hex_(this->rx_address_, 4) : std::string("unset");
+  ESP_LOGW(TAG, "SNIFF scan finished with no CRC-16 frame. Replay addr %s", shown.c_str());
+  if (this->listen_address_ != nullptr)
+    this->listen_address_->publish_state(shown);
+}
+
+void Nrf905Pluggit::sniff_tick_() {
+  if (this->dr_pin_->digital_read()) {
+    this->read_payload_();
+    if (!this->sniff_mode_)
+      return;
+  }
+  const uint32_t now = millis();
+  if (this->sniff_phase_ == SniffPhase::TEST) {
+    if (now < this->sniff_deadline_ms_)
+      return;
+    this->sniff_phase_ = SniffPhase::SCAN;
+    this->sniff_index_ = 0;
+    this->tune_sniff_(0x00, 0x00);
+    ESP_LOGI(TAG, "SNIFF test address silent. Scanning 00 00 00 00 through 00 00 FF FF");
+    return;
+  }
+  if (now - this->sniff_dwell_ms_ < 8)
+    return;
+  if (this->sniff_index_ == 65535) {
+    this->stop_sniff_();
+    return;
+  }
+  this->sniff_index_++;
+  const uint8_t hi = this->sniff_index_ >> 8;
+  const uint8_t lo = this->sniff_index_ & 0xFF;
+  if (lo == 0)
+    ESP_LOGI(TAG, "SNIFF scan 00 00 %02X 00", hi);
+  this->tune_sniff_(hi, lo);
 }
 
 void Nrf905Pluggit::read_payload_() {
@@ -315,55 +352,8 @@ void Nrf905Pluggit::read_payload_() {
   }
 
   if (this->sniff_mode_) {
-    this->sniff_heard_ = true;
-    int match = -1;
-    int free_slot = -1;
-    int lowest = -1;
-    for (int i = 0; i < SNIFF_SLOTS; i++) {
-      if (!this->sniff_slot_used_[i]) {
-        if (free_slot < 0)
-          free_slot = i;
-        continue;
-      }
-      if (memcmp(this->sniff_slot_addr_[i], buf, 3) == 0)
-        match = i;
-      if (lowest < 0 || this->sniff_slot_count_[i] < this->sniff_slot_count_[lowest])
-        lowest = i;
-    }
-    int slot;
-    if (match >= 0) {
-      slot = match;
-      if (this->sniff_slot_count_[slot] < 255)
-        this->sniff_slot_count_[slot]++;
-    } else if (free_slot >= 0) {
-      slot = free_slot;
-      memcpy(this->sniff_slot_addr_[slot], buf, 3);
-      this->sniff_slot_count_[slot] = 1;
-      this->sniff_slot_used_[slot] = true;
-    } else {
-      slot = lowest;
-      memcpy(this->sniff_slot_addr_[slot], buf, 3);
-      this->sniff_slot_count_[slot] = 1;
-      this->sniff_slot_used_[slot] = true;
-    }
-    const uint8_t count = this->sniff_slot_count_[slot];
-    const uint8_t addr[4] = {0x00, buf[0], buf[1], buf[2]};
-    const std::string pretty = to_hex_(addr, 4);
-    if (count == 1) {
-      const uint32_t now = millis();
-      if (now - this->last_noise_ms_ > 1000) {
-        this->last_noise_ms_ = now;
-        ESP_LOGD(TAG, "RX noise %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
-      }
-      return;
-    }
-    ESP_LOGI(TAG, "SNIFF candidate %s count %u", pretty.c_str(), count);
-    if (this->listen_address_ != nullptr)
-      this->listen_address_->publish_state(pretty);
-    if (count > 10) {
-      this->publish_packet_(buf, NRF_PAYLOAD_LEN);
-      this->lock_address_(buf);
-    }
+    this->publish_packet_(buf, NRF_PAYLOAD_LEN);
+    this->lock_tuned_address_();
     return;
   }
 
@@ -384,22 +374,18 @@ void Nrf905Pluggit::publish_packet_(const uint8_t *buf, size_t len) {
 void Nrf905Pluggit::start_sniff() {
   this->test_mode_ = false;
   this->sniff_mode_ = true;
-  memset(this->sniff_slot_addr_, 0, sizeof(this->sniff_slot_addr_));
-  memset(this->sniff_slot_count_, 0, sizeof(this->sniff_slot_count_));
-  memset(this->sniff_slot_used_, 0, sizeof(this->sniff_slot_used_));
-  this->sniff_heard_ = false;
-  this->sniff_silent_logged_ = false;
-  this->sniff_started_ms_ = millis();
-  this->write_config_();
+  this->sniff_phase_ = SniffPhase::TEST;
+  this->sniff_index_ = 0;
+  this->sniff_deadline_ms_ = millis() + 4000;
+  this->tune_sniff_(0x12, 0x34);
   const bool cfg_ok = this->verify_config_();
-  ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, match byte 00, RX_AFW=1, CRC off, lock after 11 hits)",
-           to_hex_(this->last_cfg_, 10).c_str());
+  ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, CRC-16, listening for 00 00 12 34)", to_hex_(this->last_cfg_, 10).c_str());
   if (!cfg_ok)
     ESP_LOGE(TAG, "SNIFF config readback mismatch");
   this->enter_rx_();
-  ESP_LOGI(TAG, "Sniff 868.4 MHz. Press the Pluggit remote within ~20 cm.");
+  ESP_LOGI(TAG, "SNIFF listening for 00 00 12 34 for 4 s. Publish tx/test on the other module now.");
   if (this->listen_address_ != nullptr)
-    this->listen_address_->publish_state("sniff 868");
+    this->listen_address_->publish_state("sniff 00 00 12 34");
   if (this->rf_rx_ != nullptr)
     this->rf_rx_->publish_state(false);
 }
@@ -496,8 +482,8 @@ void Nrf905Pluggit::transmit_test(const std::string &message) {
     return;
 
   // A few copies so a sniffer that has just switched config still catches one.
-  // 12 copies so one tx/test is enough for sniff to pass the 11-hit lock.
-  for (int i = 0; i < 12; i++) {
+  // Repeat through the sniffer's 4 s listen on 00 00 12 34.
+  for (int i = 0; i < 40; i++) {
     this->enter_standby_();
     this->enable();
     this->write_byte(NRF_CMD_WTP);
@@ -508,7 +494,7 @@ void Nrf905Pluggit::transmit_test(const std::string &message) {
     this->ce_pin_->digital_write(true);
     delay(20);
     this->enter_rx_();
-    if (i + 1 < 12)
+    if (i + 1 < 40)
       delay(40);
   }
   ESP_LOGI(TAG, "TEST TX %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
@@ -523,7 +509,8 @@ void Nrf905Pluggit::log_heartbeat_() {
   if (this->test_mode_) {
     ESP_LOGD(TAG, "TEST listen 868.4 MHz addr 00 00 12 34 CRC-16 DR=%d CD=%d AM=%d", dr, cd, am);
   } else if (this->sniff_mode_) {
-    ESP_LOGD(TAG, "sniff 868.4 MHz match byte 00 CRC off DR=%d CD=%d AM=%d — press the Pluggit remote", dr, cd, am);
+    ESP_LOGD(TAG, "sniff 868.4 MHz CRC-16 addr=%s DR=%d CD=%d AM=%d", to_hex_(this->rx_address_, 4).c_str(), dr, cd,
+             am);
   } else {
     ESP_LOGD(TAG, "replay 868.4 MHz addr=%s DR=%d CD=%d AM=%d",
              this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset", dr, cd, am);
