@@ -69,7 +69,6 @@ class Nrf905Pluggit : public Component,
   bool verify_config_();
   void enter_rx_();
   void read_payload_();
-  bool looks_like_pluggit_(const uint8_t *buf) const;
   bool has_address_() const;
   void lock_address_(const uint8_t *sniff_buf);
   void save_address_();
@@ -93,9 +92,12 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool test_mode_{false};
-  // Sniff matches the first two address bytes 00 00 (RX_AFW=2, CRC off).
-  uint8_t sniff_candidate_[2]{};
-  uint8_t sniff_candidate_hits_{0};
+  // Sniff matches one address byte 0x00. The next three payload bytes are
+  // the rest of a candidate address; lock the one seen more than 10 times.
+  static constexpr uint8_t SNIFF_SLOTS = 8;
+  uint8_t sniff_slot_addr_[8][3]{};
+  uint8_t sniff_slot_count_[8]{};
+  bool sniff_slot_used_[8]{};
   uint32_t sniff_started_ms_{0};
   bool sniff_heard_{false};
   bool sniff_silent_logged_{false};

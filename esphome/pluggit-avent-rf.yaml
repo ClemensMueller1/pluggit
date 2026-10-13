@@ -20,8 +20,8 @@
 #   868,4 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
 # Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
 # Sniff (Button „RF Adresse neu lernen“) bleibt auf 868,4 MHz, CRC aus,
-# und prüft die ersten zwei Adressbytes 00 00. Die restliche Adresse
-# erscheint als „SNIFF Pluggit address 00 00 xx xx“.
+# und prüft nur das erste Adressbyte 00. Eine Adresse wird gespeichert,
+# wenn dieselbe Kandidatenadresse mehr als 10 Mal gesehen wurde.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
@@ -60,7 +60,7 @@ esphome:
   comment: nRF905 868.4 MHz sniff and link test
   project:
     name: pluggit.avent_p_rf
-    version: "1.6.3-868"
+    version: "1.6.4-868"
 
 esp32:
   board: esp32dev
