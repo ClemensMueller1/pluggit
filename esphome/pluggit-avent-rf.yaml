@@ -20,9 +20,10 @@
 #   6A 0C 44 20 20 54 45 53 54 D8
 #   433,0 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
 # Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
-# Sniff (Button „RF Adresse neu lernen“) hört in diesem Test auf Präfix
-# 0x54 mit CRC aus und loggt „SNIFF ShockBurst address 54 45 53 54“.
-# Rauschen wird nicht mehr als Adresse gespeichert.
+# Sniff (Button „RF Adresse neu lernen“) schaltet nur fürs Lernen auf
+# 868,4 MHz und Präfix 0x00. Die Pluggit-Adresse erscheint als
+# „SNIFF Pluggit address 00 00 xx xx“. tx/test und rx/test bleiben
+# auf 433,0 MHz.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
@@ -42,7 +43,7 @@
 #   optional CD / AM des Moduls an freie GPIOs (Diagnose)
 #
 # ESPHome 2026.3+: custom_component ist entfernt. Die Komponente kommt
-# von github://ClemensMueller1/pluggit@433mhz-test (esphome/components/).
+# von github://ClemensMueller1/pluggit@snifftest (esphome/components/).
 #
 # Adresse lernen: Button „RF Adresse neu lernen“, FB ~20 cm am Modul,
 # eine Taste drücken. Sensor "Funkadresse" zeigt 00 00 xx xx (wird im
@@ -61,17 +62,17 @@ esphome:
   comment: nRF905 433.0 MHz test build
   project:
     name: pluggit.avent_p_rf
-    version: "1.6.0-433"
+    version: "1.6.1-433"
 
 esp32:
   board: esp32dev
   framework:
     type: arduino
 
-# Dieser Test-Branch. refresh 0s, damit der Frequenzwechsel nicht
-# aus dem Cache von v1.1.2 (868,4 MHz) kommt.
+# Dieser Branch. refresh 0s, damit der 868,4-MHz-Sniff nicht aus dem
+# Cache von 433mhz-test kommt.
 external_components:
-  - source: github://ClemensMueller1/pluggit@433mhz-test
+  - source: github://ClemensMueller1/pluggit@snifftest
     refresh: 0s
     components: [nrf905_pluggit]
   # Lokal, wenn YAML und components/ im selben Ordner liegen:
