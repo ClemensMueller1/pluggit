@@ -72,6 +72,7 @@ class Nrf905Pluggit : public Component,
   bool has_address_() const;
   void tune_sniff_(uint8_t xx);
   void sniff_tick_();
+  void finish_sniff_scan_();
   void lock_tuned_address_();
   void stop_sniff_();
   void save_address_();
@@ -95,9 +96,12 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool test_mode_{false};
-  // CRC-off walk of 00 00 01, 00 00 02, ... 00 00 FF.
+  // CRC-off walk of 00 00 01 .. 00 00 FF, 5 s per step.
   uint8_t sniff_index_{0};
   uint32_t sniff_dwell_ms_{0};
+  uint16_t sniff_counts_[256]{};
+  uint8_t sniff_fourth_[256]{};
+  uint8_t sniff_sample_[256][8]{};
   bool address_from_yaml_{false};
   bool nvm_valid_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};

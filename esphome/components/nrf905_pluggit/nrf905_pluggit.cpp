@@ -316,15 +316,54 @@ void Nrf905Pluggit::sniff_tick_() {
       return;
   }
   const uint32_t now = millis();
-  if (now - this->sniff_dwell_ms_ < 15)
+  if (now - this->sniff_dwell_ms_ < 5000)
     return;
-  if (this->sniff_index_ == 0xFF) {
-    this->stop_sniff_();
+  const uint8_t done = this->sniff_index_;
+  ESP_LOGI(TAG, "SNIFF 00 00 %02X step matches %u", done, this->sniff_counts_[done]);
+  if (done == 0xFF) {
+    this->finish_sniff_scan_();
     return;
   }
   this->sniff_index_++;
-  ESP_LOGI(TAG, "SNIFF try 00 00 %02X", this->sniff_index_);
+  ESP_LOGI(TAG, "SNIFF try 00 00 %02X for 5 s", this->sniff_index_);
   this->tune_sniff_(this->sniff_index_);
+}
+
+void Nrf905Pluggit::finish_sniff_scan_() {
+  ESP_LOGI(TAG, "SNIFF top addresses:");
+  uint8_t picked[5] = {0, 0, 0, 0, 0};
+  uint8_t npicked = 0;
+  for (uint8_t rank = 0; rank < 5; rank++) {
+    int best = -1;
+    for (int i = 1; i <= 255; i++) {
+      bool skip = false;
+      for (uint8_t p = 0; p < npicked; p++) {
+        if (picked[p] == i)
+          skip = true;
+      }
+      if (skip || this->sniff_counts_[i] == 0)
+        continue;
+      if (best < 0 || this->sniff_counts_[i] > this->sniff_counts_[best])
+        best = i;
+    }
+    if (best < 0)
+      break;
+    picked[npicked++] = static_cast<uint8_t>(best);
+    const std::string sample = to_hex_(this->sniff_sample_[best], 8);
+    ESP_LOGI(TAG, "SNIFF top %u: 00 00 %02X %02X matches %u sample %s", rank + 1, best, this->sniff_fourth_[best],
+             this->sniff_counts_[best], sample.c_str());
+  }
+  if (npicked > 0 && this->sniff_counts_[picked[0]] > 3) {
+    const uint8_t xx = picked[0];
+    this->rx_address_[0] = 0x00;
+    this->rx_address_[1] = 0x00;
+    this->rx_address_[2] = xx;
+    this->rx_address_[3] = this->sniff_fourth_[xx];
+    this->lock_tuned_address_();
+    return;
+  }
+  this->stop_sniff_();
+  ESP_LOGW(TAG, "SNIFF no address had more than 3 matches");
 }
 
 void Nrf905Pluggit::read_payload_() {
@@ -347,16 +386,17 @@ void Nrf905Pluggit::read_payload_() {
   }
 
   if (this->sniff_mode_) {
-    // RX width 3 strips 00 00 XX. The next on-air byte is the fourth address byte.
     const uint8_t xx = this->rx_address_[2];
-    this->rx_address_[0] = 0x00;
-    this->rx_address_[1] = 0x00;
-    this->rx_address_[2] = xx;
-    this->rx_address_[3] = buf[0];
-    const std::string addr = to_hex_(this->rx_address_, 4);
-    ESP_LOGI(TAG, "SNIFF caught %s raw %s", addr.c_str(), to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
-    this->publish_packet_(buf, NRF_PAYLOAD_LEN);
-    this->lock_tuned_address_();
+    if (xx == 0)
+      return;
+    if (this->sniff_counts_[xx] < 65535)
+      this->sniff_counts_[xx]++;
+    if (this->sniff_counts_[xx] == 1) {
+      this->sniff_fourth_[xx] = buf[0];
+      memcpy(this->sniff_sample_[xx], buf, 8);
+    }
+    const std::string raw = to_hex_(buf, 8);
+    ESP_LOGI(TAG, "SNIFF 00 00 %02X match %u raw %s", xx, this->sniff_counts_[xx], raw.c_str());
     return;
   }
 
@@ -378,6 +418,9 @@ void Nrf905Pluggit::start_sniff() {
   this->test_mode_ = false;
   this->sniff_mode_ = true;
   this->sniff_index_ = 0x01;
+  memset(this->sniff_counts_, 0, sizeof(this->sniff_counts_));
+  memset(this->sniff_fourth_, 0, sizeof(this->sniff_fourth_));
+  memset(this->sniff_sample_, 0, sizeof(this->sniff_sample_));
   this->tune_sniff_(0x01);
   const bool cfg_ok = this->verify_config_();
   ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, RX width 3, CRC off)", to_hex_(this->last_cfg_, 10).c_str());
@@ -387,8 +430,8 @@ void Nrf905Pluggit::start_sniff() {
     return;
   }
   this->enter_rx_();
-  ESP_LOGI(TAG, "SNIFF try 00 00 01");
-  ESP_LOGI(TAG, "SNIFF walking 00 00 01 through 00 00 FF, one step at a time. Publish tx/test while 00 00 12 is shown.");
+  ESP_LOGI(TAG, "SNIFF try 00 00 01 for 5 s");
+  ESP_LOGI(TAG, "SNIFF walking 00 00 01 through 00 00 FF, 5 s each. Lock only above 3 matches. Publish tx/test during 00 00 12.");
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state("sniff 00 00 XX");
   if (this->rf_rx_ != nullptr)
@@ -487,7 +530,7 @@ void Nrf905Pluggit::transmit_test(const std::string &message) {
     return;
 
   // A few copies so a sniffer that has just switched config still catches one.
-  // Cover the 1.5 s listen on 00 00 12 plus the XX scan.
+  // One 5 s sniff step on 00 00 12.
   for (int i = 0; i < 90; i++) {
     this->enter_standby_();
     this->enable();
