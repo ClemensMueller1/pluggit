@@ -19,9 +19,9 @@
 #   76 0E 44 20 20 54 45 53 54 D8
 #   868,4 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
 # Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
-# Sniff (Button „RF Adresse neu lernen“) bleibt auf 868,4 MHz und hört
-# auf Präfix 0x00. Die Pluggit-Adresse erscheint als
-# „SNIFF Pluggit address 00 00 xx xx“.
+# Sniff (Button „RF Adresse neu lernen“) bleibt auf 868,4 MHz, CRC aus,
+# und prüft die ersten zwei Adressbytes 00 00. Die restliche Adresse
+# erscheint als „SNIFF Pluggit address 00 00 xx xx“.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
@@ -60,7 +60,7 @@ esphome:
   comment: nRF905 868.4 MHz sniff and link test
   project:
     name: pluggit.avent_p_rf
-    version: "1.6.2-868"
+    version: "1.6.3-868"
 
 esp32:
   board: esp32dev
@@ -69,8 +69,9 @@ esp32:
 
 # Dieser Branch. refresh 0s, damit 868,4 MHz nicht aus einem älteren Cache kommt.
 external_components:
-  - source: github://ClemensMueller1/pluggit@snifftest
-    refresh: 0s
+  - source:
+      type: local
+      path: components
     components: [nrf905_pluggit]
   # Lokal, wenn YAML und components/ im selben Ordner liegen:
   # - source:

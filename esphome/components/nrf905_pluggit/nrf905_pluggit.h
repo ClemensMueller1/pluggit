@@ -93,10 +93,12 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool test_mode_{false};
-  // 1-byte match while CRC is off. Pluggit remotes use 0x00 at 868.4 MHz.
-  uint8_t sniff_prefix_{0x00};
-  uint8_t sniff_candidate_[3]{};
+  // Sniff matches the first two address bytes 00 00 (RX_AFW=2, CRC off).
+  uint8_t sniff_candidate_[2]{};
   uint8_t sniff_candidate_hits_{0};
+  uint32_t sniff_started_ms_{0};
+  bool sniff_heard_{false};
+  bool sniff_silent_logged_{false};
   bool address_from_yaml_{false};
   bool nvm_valid_{false};
   uint8_t rx_address_[4]{0x00, 0x00, 0x00, 0x00};
