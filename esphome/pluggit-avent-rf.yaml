@@ -16,8 +16,9 @@
 #   {prefix}/rx/test   Empfang (leer oder listen), off = Replay zurück
 #   {prefix}/tx/test   Senden (Text oder Hex, leer = Testmuster)
 # Beide Seiten programmieren dasselbe Registerbild:
-#   76 0E 44 20 20 54 45 53 54 D8
-#   868,4 MHz, Adresse 54 45 53 54, AFW 4/4, 32 Byte, CRC-16.
+#   76 0E 44 20 20 00 00 12 34 D8
+#   868,4 MHz, Adresse 00 00 12 34, AFW 4/4, 32 Byte, CRC-16.
+#   Die Adresse beginnt mit 00, damit der Sniff (1-Byte-Match 00) sie sieht.
 # Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
 # Sniff (Button „RF Adresse neu lernen“) bleibt auf 868,4 MHz, CRC aus,
 # und prüft nur das erste Adressbyte 00. Eine Adresse wird gespeichert,
@@ -60,7 +61,7 @@ esphome:
   comment: nRF905 868.4 MHz sniff and link test
   project:
     name: pluggit.avent_p_rf
-    version: "1.6.4-868"
+    version: "1.6.5-868"
 
 esp32:
   board: esp32dev
