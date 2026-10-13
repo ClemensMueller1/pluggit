@@ -69,9 +69,8 @@ esp32:
 
 # Dieser Branch. refresh 0s, damit 868,4 MHz nicht aus einem älteren Cache kommt.
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://ClemensMueller1/pluggit@snifftest
+    refresh: 0s
     components: [nrf905_pluggit]
   # Lokal, wenn YAML und components/ im selben Ordner liegen:
   # - source:
