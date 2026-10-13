@@ -316,24 +316,14 @@ void Nrf905Pluggit::sniff_tick_() {
       return;
   }
   const uint32_t now = millis();
-  if (this->sniff_lead_) {
-    if (now - this->sniff_dwell_ms_ < 1500)
-      return;
-    this->sniff_lead_ = false;
-    this->sniff_index_ = 0;
-    this->tune_sniff_(0x00);
-    ESP_LOGI(TAG, "SNIFF scanning 00 00 00 through 00 00 FF");
-    return;
-  }
   if (now - this->sniff_dwell_ms_ < 15)
     return;
-  if (this->sniff_index_ == 255) {
+  if (this->sniff_index_ == 0xFF) {
     this->stop_sniff_();
     return;
   }
   this->sniff_index_++;
-  if ((this->sniff_index_ & 0x0F) == 0)
-    ESP_LOGI(TAG, "SNIFF try 00 00 %02X", this->sniff_index_);
+  ESP_LOGI(TAG, "SNIFF try 00 00 %02X", this->sniff_index_);
   this->tune_sniff_(this->sniff_index_);
 }
 
@@ -387,9 +377,8 @@ void Nrf905Pluggit::publish_packet_(const uint8_t *buf, size_t len) {
 void Nrf905Pluggit::start_sniff() {
   this->test_mode_ = false;
   this->sniff_mode_ = true;
-  this->sniff_lead_ = true;
-  this->sniff_index_ = 0x12;
-  this->tune_sniff_(0x12);
+  this->sniff_index_ = 0x01;
+  this->tune_sniff_(0x01);
   const bool cfg_ok = this->verify_config_();
   ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, RX width 3, CRC off)", to_hex_(this->last_cfg_, 10).c_str());
   if (!cfg_ok || this->last_cfg_[2] != 0x43) {
@@ -398,7 +387,8 @@ void Nrf905Pluggit::start_sniff() {
     return;
   }
   this->enter_rx_();
-  ESP_LOGI(TAG, "SNIFF listening for 00 00 12, then scanning 00 00 XX. Publish tx/test on the other module now.");
+  ESP_LOGI(TAG, "SNIFF try 00 00 01");
+  ESP_LOGI(TAG, "SNIFF walking 00 00 01 through 00 00 FF, one step at a time. Publish tx/test while 00 00 12 is shown.");
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state("sniff 00 00 XX");
   if (this->rf_rx_ != nullptr)

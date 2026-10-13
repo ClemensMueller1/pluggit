@@ -95,8 +95,7 @@ class Nrf905Pluggit : public Component,
 
   bool sniff_mode_{false};
   bool test_mode_{false};
-  // CRC-off scan of the 3-byte address 00 00 XX. Lead listens on 00 00 12 first.
-  bool sniff_lead_{false};
+  // CRC-off walk of 00 00 01, 00 00 02, ... 00 00 FF.
   uint8_t sniff_index_{0};
   uint32_t sniff_dwell_ms_{0};
   bool address_from_yaml_{false};
