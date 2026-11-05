@@ -312,8 +312,22 @@ void Nrf905Pluggit::note_sniff_frame_(const uint8_t *buf) {
   // RX address width 0 does not strip the sender's address. Pluggit still
   // sends four address bytes, LSB first: 00 00 2B 9F is on air as
   // 9F 2B 00 00, then the payload 80 90 03 18. A frame with no address
-  // prefix can start at offset 0.
-  ESP_LOGI(TAG, "SNIFF RX %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+  // prefix can start at offset 0. Noise is not logged: only a buffer that
+  // contains 80 90, or every 100th frame.
+  this->sniff_rx_count_++;
+  bool has_pluggit = false;
+  for (size_t i = 0; i + 1 < NRF_PAYLOAD_LEN; i++) {
+    if (buf[i] == 0x80 && buf[i + 1] == 0x90) {
+      has_pluggit = true;
+      break;
+    }
+  }
+  const bool sample = (this->sniff_rx_count_ % 100) == 0;
+  if (has_pluggit) {
+    ESP_LOGI(TAG, "SNIFF RX %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+  } else if (sample) {
+    ESP_LOGI(TAG, "SNIFF RX #%u %s", this->sniff_rx_count_, to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+  }
   for (size_t off = 0; off + 10 < NRF_PAYLOAD_LEN; off++) {
     if (buf[off] != 0x80 || buf[off + 1] != 0x90 || buf[off + 2] != 0x03 || buf[off + 3] != 0x18)
       continue;
@@ -371,6 +385,7 @@ void Nrf905Pluggit::start_sniff() {
   }
   this->test_mode_ = false;
   this->sniff_mode_ = true;
+  this->sniff_rx_count_ = 0;
   this->write_config_();
   const bool cfg_ok = this->verify_config_();
   ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, TX address width 4, RX address width 0, CRC off)",

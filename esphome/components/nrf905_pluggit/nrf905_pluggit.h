@@ -113,6 +113,7 @@ class Nrf905Pluggit : public Component,
   uint32_t expect_at_ms_{0};
 
   bool sniff_mode_{false};
+  uint32_t sniff_rx_count_{0};
   bool test_mode_{false};
   bool address_from_yaml_{false};
   bool nvm_valid_{false};

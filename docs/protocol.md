@@ -30,8 +30,10 @@ einmal das Link-Test-Muster mit der schon gesetzten Adresse, also
 genau eine Adresse und danach 32 Byte Text. Ein Pluggit-Rahmen kann
 im Puffer mit den vier Adressbytes in Luftreihenfolge beginnen und
 danach `80 90 03 18` enthalten. Address 05 und 06 darin sind die
-Geräteadresse (`00 00` plus diese zwei Bytes). Der Sniff loggt sie
-und endet erst, wenn die Adresse in der HA-Oberfläche gesetzt wird
+Geräteadresse (`00 00` plus diese zwei Bytes). Der Sniff loggt einen
+Rahmen als `SNIFF RX` nur, wenn der Puffer `80 90` enthält, und sonst
+jedes 100. Paket als `SNIFF RX #100`. Die Geräteadresse loggt er
+weiter und endet erst, wenn die Adresse in der HA-Oberfläche gesetzt wird
 (`rf/address/set`, danach NVM, CRC-16, Adressbreite 4). Aus/1/2/3-Pakete
 in der HA-MQTT-Config ablegen; die Fan-Entität sendet sie auf `rf/tx`.
 

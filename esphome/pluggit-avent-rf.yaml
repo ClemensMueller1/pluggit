@@ -15,8 +15,9 @@
 # die Nutzdaten. Der Chip sendet die Adresse LSB zuerst, 11 22 33 44
 # also als 44 33 22 11. Lehnt der Chip Byte 2 ungleich 0x40 ab, endet
 # der Sniff sofort. Sonst geht einmal das Link-Test-Muster mit der
-# schon gesetzten Adresse raus (eine Adresse, dann 32 Byte Text), danach
-# jeder Empfang als SNIFF RX. Steht 80 90 03 18 im Puffer, loggt der ESP
+# schon gesetzten Adresse raus (eine Adresse, dann 32 Byte Text). SNIFF RX
+# nur, wenn der Puffer 80 90 enthält, sonst nur jedes 100. Paket
+# (SNIFF RX #100). Steht 80 90 03 18 im Puffer, loggt der ESP
 # „SNIFF device address 00 00 xx xx“ (Address 05/06). Der Sniff endet
 # erst, wenn die ShockBurst-Adresse in HA gesetzt wird; HA sendet sie
 # auf rf/address/set, der ESP speichert sie im NVM. Danach Aus/1/2/3 an
@@ -69,7 +70,7 @@ esphome:
   comment: nRF905 868.4 MHz sniff, replay and sensor poll
   project:
     name: pluggit.avent_p_rf
-    version: "1.7.3-868"
+    version: "1.7.4-868"
   on_boot:
     - priority: -100
       then:
