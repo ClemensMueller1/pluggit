@@ -84,7 +84,7 @@ void Nrf905Pluggit::dump_config() {
     LOG_PIN("  CD Pin: ", this->cd_pin_);
   if (this->am_pin_ != nullptr)
     LOG_PIN("  AM Pin: ", this->am_pin_);
-  ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, addr[0]=0x00)" : "replay CRC-16");
+  ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, address width 0)" : "replay CRC-16");
   ESP_LOGCONFIG(TAG, "  NVM address: %s",
                 this->nvm_valid_ ? to_hex_(this->nvm_address_, 4).c_str() : "unset");
   ESP_LOGCONFIG(TAG, "  Address: %s",
@@ -95,10 +95,6 @@ void Nrf905Pluggit::dump_config() {
 void Nrf905Pluggit::loop() {
   if (this->is_failed() || this->dr_pin_ == nullptr)
     return;
-  if (this->sniff_mode_) {
-    this->sniff_tick_();
-    return;
-  }
   if (!this->dr_pin_->digital_read())
     return;
   this->read_payload_();
@@ -114,17 +110,21 @@ void Nrf905Pluggit::write_config_() {
   // 868.4 MHz: HFREQ_PLL=1, CH_NO=118 (0x76).
   //   f = (422.4 + 11.8) * 2 = 868.4 MHz.
   //   Byte 1 0x0E = PA_PWR=+10 dBm, HFREQ_PLL=1, CH_NO[8]=0.
-  // 0x43 = TX address width 4, RX address width 3. CRC off keeps the 16 MHz crystal.
+  // Replay: 0x44 = TX/RX address width 4, CRC-16.
+  // Sniff: 0x00 = TX and RX address width 0. The chip sends an address LSB
+  // first, so 00 00 2B 9F is on air as 9F 2B 00 00 and a 1-byte match on 00
+  // never hits. CRC off. Width 0 is outside the documented 1- and 4-byte
+  // encodings; start_sniff() rejects the mode unless byte 2 reads back 0x00.
   uint8_t cfg[10] = {
       0x76,
       0x0E,
-      static_cast<uint8_t>(this->sniff_mode_ ? 0x43 : 0x44),
+      static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : 0x44),
       0x20,
       0x20,
-      this->rx_address_[0],
-      this->rx_address_[1],
-      this->rx_address_[2],
-      this->rx_address_[3],
+      static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : this->rx_address_[0]),
+      static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : this->rx_address_[1]),
+      static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : this->rx_address_[2]),
+      static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : this->rx_address_[3]),
       static_cast<uint8_t>(this->sniff_mode_ ? 0x18 : 0xD8),
   };
   memcpy(this->last_cfg_, cfg, sizeof(cfg));
@@ -154,6 +154,10 @@ static const uint8_t TEST_CFG[10] = {0x76, 0x0E, 0x44, 0x20, 0x20, 0x00, 0x00, 0
 bool Nrf905Pluggit::program_test_radio_() {
   if (this->is_failed()) {
     ESP_LOGW(TAG, "TEST skipped: nRF905 setup failed");
+    return false;
+  }
+  if (this->sniff_mode_) {
+    ESP_LOGW(TAG, "TEST skipped: sniff is active — set the ShockBurst address in Home Assistant to leave sniff");
     return false;
   }
   this->sniff_mode_ = false;
@@ -286,28 +290,6 @@ void Nrf905Pluggit::load_address_() {
   memcpy(this->rx_address_, this->nvm_address_, 4);
 }
 
-void Nrf905Pluggit::tune_sniff_(uint8_t xx) {
-  this->rx_address_[0] = 0x00;
-  this->rx_address_[1] = 0x00;
-  this->rx_address_[2] = xx;
-  this->rx_address_[3] = 0x00;
-  this->write_config_();
-  this->enter_rx_();
-  this->sniff_dwell_ms_ = millis();
-}
-
-void Nrf905Pluggit::lock_tuned_address_() {
-  this->sniff_mode_ = false;
-  this->save_address_();
-  this->write_config_();
-  this->write_tx_address_();
-  this->enter_rx_();
-  const std::string addr = to_hex_(this->rx_address_, 4);
-  ESP_LOGI(TAG, "SNIFF locked %s (caught with CRC off, replay uses CRC-16)", addr.c_str());
-  if (this->listen_address_ != nullptr)
-    this->listen_address_->publish_state(addr);
-}
-
 void Nrf905Pluggit::stop_sniff_() {
   this->sniff_mode_ = false;
   if (this->nvm_valid_)
@@ -318,66 +300,26 @@ void Nrf905Pluggit::stop_sniff_() {
   this->write_tx_address_();
   this->enter_rx_();
   const std::string shown = this->has_address_() ? to_hex_(this->rx_address_, 4) : std::string("unset");
-  ESP_LOGW(TAG, "SNIFF scan finished with no frame on 00 00 XX. Replay addr %s", shown.c_str());
+  ESP_LOGW(TAG, "SNIFF stopped. Replay addr %s", shown.c_str());
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state(shown);
 }
 
-void Nrf905Pluggit::sniff_tick_() {
-  if (this->dr_pin_->digital_read()) {
-    this->read_payload_();
-    if (!this->sniff_mode_)
-      return;
-  }
-  const uint32_t now = millis();
-  if (now - this->sniff_dwell_ms_ < 5000)
-    return;
-  const uint8_t done = this->sniff_index_;
-  ESP_LOGI(TAG, "SNIFF 00 00 %02X step matches %u", done, this->sniff_counts_[done]);
-  if (done == 0xFF) {
-    this->finish_sniff_scan_();
-    return;
-  }
-  this->sniff_index_++;
-  ESP_LOGI(TAG, "SNIFF try 00 00 %02X for 5 s", this->sniff_index_);
-  this->tune_sniff_(this->sniff_index_);
-}
-
-void Nrf905Pluggit::finish_sniff_scan_() {
-  ESP_LOGI(TAG, "SNIFF top addresses:");
-  uint8_t picked[5] = {0, 0, 0, 0, 0};
-  uint8_t npicked = 0;
-  for (uint8_t rank = 0; rank < 5; rank++) {
-    int best = -1;
-    for (int i = 1; i <= 255; i++) {
-      bool skip = false;
-      for (uint8_t p = 0; p < npicked; p++) {
-        if (picked[p] == i)
-          skip = true;
-      }
-      if (skip || this->sniff_counts_[i] == 0)
-        continue;
-      if (best < 0 || this->sniff_counts_[i] > this->sniff_counts_[best])
-        best = i;
-    }
-    if (best < 0)
-      break;
-    picked[npicked++] = static_cast<uint8_t>(best);
-    const std::string sample = to_hex_(this->sniff_sample_[best], 8);
-    ESP_LOGI(TAG, "SNIFF top %u: 00 00 %02X %02X matches %u sample %s", rank + 1, best, this->sniff_fourth_[best],
-             this->sniff_counts_[best], sample.c_str());
-  }
-  if (npicked > 0 && this->sniff_counts_[picked[0]] > 3) {
-    const uint8_t xx = picked[0];
-    this->rx_address_[0] = 0x00;
-    this->rx_address_[1] = 0x00;
-    this->rx_address_[2] = xx;
-    this->rx_address_[3] = this->sniff_fourth_[xx];
-    this->lock_tuned_address_();
+void Nrf905Pluggit::note_sniff_frame_(const uint8_t *buf) {
+  // Address width 0 does not strip the sender's address. Pluggit still sends
+  // four address bytes, LSB first: 00 00 2B 9F is on air as 9F 2B 00 00,
+  // then the payload 80 90 03 18. A frame from another width-0 radio can
+  // start at offset 0.
+  ESP_LOGI(TAG, "SNIFF RX %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+  for (size_t off = 0; off + 10 < NRF_PAYLOAD_LEN; off++) {
+    if (buf[off] != 0x80 || buf[off + 1] != 0x90 || buf[off + 2] != 0x03 || buf[off + 3] != 0x18)
+      continue;
+    // Address 05/06 are payload bytes 9 and 10 of the 80 90 frame.
+    const uint8_t addr5 = buf[off + 9];
+    const uint8_t addr6 = buf[off + 10];
+    ESP_LOGI(TAG, "SNIFF device address 00 00 %02X %02X", addr5, addr6);
     return;
   }
-  this->stop_sniff_();
-  ESP_LOGW(TAG, "SNIFF no address had more than 3 matches");
 }
 
 void Nrf905Pluggit::read_payload_() {
@@ -400,17 +342,7 @@ void Nrf905Pluggit::read_payload_() {
   }
 
   if (this->sniff_mode_) {
-    const uint8_t xx = this->rx_address_[2];
-    if (xx == 0)
-      return;
-    if (this->sniff_counts_[xx] < 65535)
-      this->sniff_counts_[xx]++;
-    if (this->sniff_counts_[xx] == 1) {
-      this->sniff_fourth_[xx] = buf[0];
-      memcpy(this->sniff_sample_[xx], buf, 8);
-    }
-    const std::string raw = to_hex_(buf, 8);
-    ESP_LOGI(TAG, "SNIFF 00 00 %02X match %u raw %s", xx, this->sniff_counts_[xx], raw.c_str());
+    this->note_sniff_frame_(buf);
     return;
   }
 
@@ -430,25 +362,27 @@ void Nrf905Pluggit::publish_packet_(const uint8_t *buf, size_t len) {
 }
 
 void Nrf905Pluggit::start_sniff() {
+  if (this->is_failed()) {
+    ESP_LOGW(TAG, "SNIFF skipped: nRF905 setup failed");
+    return;
+  }
   this->test_mode_ = false;
   this->sniff_mode_ = true;
-  this->sniff_index_ = 0x01;
-  memset(this->sniff_counts_, 0, sizeof(this->sniff_counts_));
-  memset(this->sniff_fourth_, 0, sizeof(this->sniff_fourth_));
-  memset(this->sniff_sample_, 0, sizeof(this->sniff_sample_));
-  this->tune_sniff_(0x01);
+  this->write_config_();
   const bool cfg_ok = this->verify_config_();
-  ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, RX width 3, CRC off)", to_hex_(this->last_cfg_, 10).c_str());
-  if (!cfg_ok || this->last_cfg_[2] != 0x43) {
-    ESP_LOGE(TAG, "Chip rejected a 3-byte RX address (config byte 2 is not 0x43)");
+  ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, TX/RX address width 0, CRC off)", to_hex_(this->last_cfg_, 10).c_str());
+  if (!cfg_ok || this->last_cfg_[2] != 0x00) {
+    ESP_LOGE(TAG, "Chip rejected address width 0 (config byte 2 is not 0x00)");
     this->stop_sniff_();
     return;
   }
-  this->enter_rx_();
-  ESP_LOGI(TAG, "SNIFF try 00 00 01 for 5 s");
-  ESP_LOGI(TAG, "SNIFF walking 00 00 01 through 00 00 FF, 5 s each. Lock only above 3 matches. Publish tx/test during 00 00 12.");
+  uint8_t test[NRF_PAYLOAD_LEN] = {0};
+  fill_test_payload_("", test);
+  ESP_LOGI(TAG, "SNIFF sending test payload once");
+  this->transmit_bytes_(test);
+  ESP_LOGI(TAG, "SNIFF listening. Set the ShockBurst address in Home Assistant to leave sniff.");
   if (this->listen_address_ != nullptr)
-    this->listen_address_->publish_state("sniff 00 00 XX");
+    this->listen_address_->publish_state("sniff");
   if (this->rf_rx_ != nullptr)
     this->rf_rx_->publish_state(false);
 }
@@ -471,6 +405,7 @@ void Nrf905Pluggit::set_address_hex(const std::string &hex) {
       this->listen_address_->publish_state(pretty);
     return;
   }
+  const bool leaving_sniff = this->sniff_mode_;
   memcpy(this->rx_address_, buf, 4);
   this->test_mode_ = false;
   this->sniff_mode_ = false;
@@ -479,6 +414,8 @@ void Nrf905Pluggit::set_address_hex(const std::string &hex) {
   this->write_tx_address_();
   this->enter_rx_();
   const std::string pretty = to_hex_(this->rx_address_, 4);
+  if (leaving_sniff)
+    ESP_LOGI(TAG, "SNIFF off — address set from Home Assistant");
   ESP_LOGI(TAG, "ShockBurst address set to %s and saved to NVM", pretty.c_str());
   if (this->listen_address_ != nullptr)
     this->listen_address_->publish_state(pretty);
@@ -614,6 +551,10 @@ void Nrf905Pluggit::test_listen(const std::string &command) {
     cmd.push_back(c);
   }
   if (cmd == "0" || cmd == "off" || cmd == "normal" || cmd == "stop" || cmd == "exit") {
+    if (this->sniff_mode_) {
+      ESP_LOGW(TAG, "TEST off ignored: sniff is active — set the ShockBurst address in Home Assistant to leave sniff");
+      return;
+    }
     this->leave_test_();
     return;
   }
@@ -633,8 +574,7 @@ void Nrf905Pluggit::transmit_test(const std::string &message) {
   if (!this->program_test_radio_())
     return;
 
-  // A few copies so a sniffer that has just switched config still catches one.
-  // One 5 s sniff step on 00 00 12.
+  // A few copies so a receiver that has just switched config still catches one.
   for (int i = 0; i < 90; i++) {
     this->enter_standby_();
     this->enable();
@@ -661,7 +601,7 @@ void Nrf905Pluggit::log_heartbeat_() {
   if (this->test_mode_) {
     ESP_LOGD(TAG, "TEST listen 868.4 MHz addr 00 00 12 34 CRC-16 DR=%d CD=%d AM=%d", dr, cd, am);
   } else if (this->sniff_mode_) {
-    ESP_LOGD(TAG, "sniff 868.4 MHz CRC off 00 00 %02X DR=%d CD=%d AM=%d", this->rx_address_[2], dr, cd, am);
+    ESP_LOGD(TAG, "sniff 868.4 MHz CRC off address width 0 DR=%d CD=%d AM=%d", dr, cd, am);
   } else {
     ESP_LOGD(TAG, "replay 868.4 MHz addr=%s DR=%d CD=%d AM=%d",
              this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset", dr, cd, am);

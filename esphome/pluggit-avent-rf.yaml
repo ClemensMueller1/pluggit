@@ -9,11 +9,16 @@
 # Lüfterstufe und T1–T4 stehen in der Anlagen-Antwort 80 90 auf die
 # Abfrage 90 80 03 04 00 (Register 0x0400). Der ESP sendet diese Abfrage
 # 15 s nach dem Start und dann alle 10 min. MQTT: speed, t1, t2, t3, t4.
-# Sniff nur über den Button „RF Adresse neu lernen“. Pluggit-Adresse ist
-# 00 00 xx xx. Nach dem Lock jede FB-Taste (Aus/1/2/3) drücken und das
-# 32-Byte-Paket in HA Funkpaket 1–4 eintragen. Die Adresse erscheint in
-# der HA-Config (ShockBurst-Adresse) und kann dort gesetzt werden;
-# HA sendet sie auf rf/address/set, der ESP speichert sie im NVM.
+# Sniff nur über den Button „RF Adresse neu lernen“: CRC aus, TX- und
+# RX-Adresslänge 0. Der Chip sendet die Adresse LSB zuerst, 00 00 2B 9F
+# also als 9F 2B 00 00; ein Match auf 00 trifft das erste Byte nicht.
+# Lehnt der Chip die Länge 0 ab (Readback von Byte 2 ungleich 00), endet
+# der Sniff sofort. Sonst geht einmal das Link-Test-Muster raus, danach
+# jeder Empfang als SNIFF RX. Steht 80 90 03 18 im Puffer, loggt der ESP
+# „SNIFF device address 00 00 xx xx“ (Address 05/06). Der Sniff endet
+# erst, wenn die ShockBurst-Adresse in HA gesetzt wird; HA sendet sie
+# auf rf/address/set, der ESP speichert sie im NVM. Danach Aus/1/2/3 an
+# der FB drücken und die 32-Byte-Pakete in HA Funkpaket 1–4 eintragen.
 #
 # Link-Test zweier Module (NVM und gelernte Adresse werden nicht benutzt):
 #   {prefix}/rx/test   Empfang (leer oder listen), off = Replay zurück
@@ -21,11 +26,8 @@
 # Beide Seiten programmieren dasselbe Registerbild:
 #   76 0E 44 20 20 00 00 12 34 D8
 #   868,4 MHz, Adresse 00 00 12 34, AFW 4/4, 32 Byte, CRC-16.
-#   Die Adresse beginnt mit 00, damit der Sniff (1-Byte-Match 00) sie sieht.
 # Ein Rahmen ohne CRC-/Adressfehler steht im Log als "TEST RX CRC-16 OK".
-# Sniff läuft 00 00 01 .. 00 00 FF, 5 s je Schritt, CRC aus, 3-Byte-Adresse.
-# Jeder Schritt loggt die Trefferzahl. Gespeichert wird nur eine Adresse
-# mit mehr als 3 Treffern. Danach die Top 5. tx/test während 00 00 12 senden.
+# tx/test und rx/test sind während des Sniff gesperrt.
 #
 # Hardware:
 #   ESP32-DevKit (3,3 V)
@@ -48,9 +50,10 @@
 # von github://ClemensMueller1/pluggit@sensors (esphome/components/).
 #
 # Adresse lernen: Button „RF Adresse neu lernen“, FB ~20 cm am Modul,
-# eine Taste drücken. Sensor "Funkadresse" zeigt 00 00 xx xx (wird im
-# Flash gespeichert). Danach Aus/1/2/3 an der FB drücken und die Pakete
-# in HA eintragen. Optional fest:
+# eine Taste drücken. Im Log „SNIFF device address 00 00 xx xx“ ablesen
+# und in HA als ShockBurst-Adresse speichern. Das beendet den Sniff.
+# Danach Aus/1/2/3 an der FB drücken und die Pakete in HA eintragen.
+# Optional fest:
 #   rx_address: [0x00, 0x00, 0x0A, 0x7A]
 
 substitutions:
@@ -64,7 +67,7 @@ esphome:
   comment: nRF905 868.4 MHz sniff, replay and sensor poll
   project:
     name: pluggit.avent_p_rf
-    version: "1.7.0-868"
+    version: "1.7.2-868"
   on_boot:
     - priority: -100
       then:

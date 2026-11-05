@@ -19,13 +19,18 @@ Quellen: Betriebsanleitung 2011, KNX-User-Forum Thread
 - Die FB sendet nur nach Tastendruck (kein Dauerfunk, Sleep nach 2 min)
 
 Die ESPHome-Komponente startet im Replay-Modus (gespeicherte Adresse,
-CRC-16) und loggt `NVM ShockBurst address: …`. Sniff nur über den
-Button „RF Adresse neu lernen“ (1-Byte-Adresse `0x00`, CRC aus).
-Pluggit-Rahmen: Prefix `00 00` plus Payload `90` / `80` / `88`. Nach
-dem Lock die gelernte Adresse im Flash halten. Dieselbe Adresse meldet
-der ESP auf `rf/address`; die HA-MQTT-Config zeigt sie und kann sie
-über `rf/address/set` setzen. Aus/1/2/3-Pakete in der HA-MQTT-Config
-ablegen; die Fan-Entität sendet sie auf `rf/tx`.
+CRC-16) und loggt `NVM ShockBurst address: …`. Der nRF905 sendet die
+Adressbytes LSB zuerst: `11 22 33 44` geht als `44 33 22 11` auf die
+Luft, `00 00 2B 9F` als `9F 2B 00 00`. Sniff nur über den Button
+„RF Adresse neu lernen“: CRC aus, TX- und RX-Adresslänge 0
+(Config-Byte 2 = `0x00`, Readback muss das bestätigen). Beim Start
+sendet der ESP einmal das Link-Test-Muster. Ein Pluggit-Rahmen kann
+im Puffer mit den vier Adressbytes in Luftreihenfolge beginnen und
+danach `80 90 03 18` enthalten. Address 05 und 06 darin sind die
+Geräteadresse (`00 00` plus diese zwei Bytes). Der Sniff loggt sie
+und endet erst, wenn die Adresse in der HA-Oberfläche gesetzt wird
+(`rf/address/set`, danach NVM, CRC-16, Adressbreite 4). Aus/1/2/3-Pakete
+in der HA-MQTT-Config ablegen; die Fan-Entität sendet sie auf `rf/tx`.
 
 Beispiel-Sniff (Forum):
 
