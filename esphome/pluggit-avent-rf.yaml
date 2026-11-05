@@ -6,6 +6,9 @@
 # Boot: Replay mit gespeicherter ShockBurst-Adresse (CRC-16). Das Log
 # zeigt „NVM ShockBurst address: …“. Fan Aus/1/2/3 sendet die vier
 # 32-Byte-Pakete aus der HA-MQTT-Config auf rf/tx.
+# Lüfterstufe und T1–T4 stehen in der Anlagen-Antwort 80 90 auf die
+# Abfrage 90 80 03 04 00 (Register 0x0400). Der ESP sendet diese Abfrage
+# 15 s nach dem Start und dann alle 10 min. MQTT: speed, t1, t2, t3, t4.
 # Sniff nur über den Button „RF Adresse neu lernen“. Pluggit-Adresse ist
 # 00 00 xx xx. Nach dem Lock jede FB-Taste (Aus/1/2/3) drücken und das
 # 32-Byte-Paket in HA Funkpaket 1–4 eintragen. Die Adresse erscheint in
@@ -42,7 +45,7 @@
 #   optional CD / AM des Moduls an freie GPIOs (Diagnose)
 #
 # ESPHome 2026.3+: custom_component ist entfernt. Die Komponente kommt
-# von github://ClemensMueller1/pluggit@snifftest (esphome/components/).
+# von github://ClemensMueller1/pluggit@sensors (esphome/components/).
 #
 # Adresse lernen: Button „RF Adresse neu lernen“, FB ~20 cm am Modul,
 # eine Taste drücken. Sensor "Funkadresse" zeigt 00 00 xx xx (wird im
@@ -58,10 +61,16 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: nRF905 868.4 MHz sniff and link test
+  comment: nRF905 868.4 MHz sniff, replay and sensor poll
   project:
     name: pluggit.avent_p_rf
-    version: "1.6.9-868"
+    version: "1.7.0-868"
+  on_boot:
+    - priority: -100
+      then:
+        - delay: 15s
+        - nrf905_pluggit.request_sensors:
+            id: nrf
 
 esp32:
   board: esp32dev
@@ -70,7 +79,7 @@ esp32:
 
 # Dieser Branch. refresh 0s, damit 868,4 MHz nicht aus einem älteren Cache kommt.
 external_components:
-  - source: github://ClemensMueller1/pluggit@snifftest
+  - source: github://ClemensMueller1/pluggit@sensors
     refresh: 0s
     components: [nrf905_pluggit]
   # Lokal, wenn YAML und components/ im selben Ordner liegen:
@@ -175,6 +184,56 @@ nrf905_pluggit:
     name: "Funkempfang"
   radio_ok:
     name: "nRF905 SPI"
+  fan_stage:
+    id: rf_fan_stage
+    internal: true
+    force_update: true
+    on_value:
+      then:
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/speed
+            payload: !lambda "return esphome::to_string((int) x);"
+            retain: true
+  t1:
+    id: rf_t1
+    internal: true
+    force_update: true
+    on_value:
+      then:
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/t1
+            payload: !lambda "return esphome::to_string((int) x);"
+            retain: true
+  t2:
+    id: rf_t2
+    internal: true
+    force_update: true
+    on_value:
+      then:
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/t2
+            payload: !lambda "return esphome::to_string((int) x);"
+            retain: true
+  t3:
+    id: rf_t3
+    internal: true
+    force_update: true
+    on_value:
+      then:
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/t3
+            payload: !lambda "return esphome::to_string((int) x);"
+            retain: true
+  t4:
+    id: rf_t4
+    internal: true
+    force_update: true
+    on_value:
+      then:
+        - mqtt.publish:
+            topic: ${mqtt_prefix}/t4
+            payload: !lambda "return esphome::to_string((int) x);"
+            retain: true
   on_packet:
     - mqtt.publish:
         topic: ${mqtt_prefix}/rf/rx
@@ -193,4 +252,10 @@ button:
     icon: mdi:radar
     on_press:
       - nrf905_pluggit.start_sniff:
+          id: nrf
+
+interval:
+  - interval: 10min
+    then:
+      - nrf905_pluggit.request_sensors:
           id: nrf

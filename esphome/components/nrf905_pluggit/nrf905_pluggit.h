@@ -8,6 +8,7 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/preferences.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/sensor/sensor.h"
 #include "esphome/components/spi/spi.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 
@@ -37,6 +38,11 @@ class Nrf905Pluggit : public Component,
   void set_listen_address(text_sensor::TextSensor *sensor) { this->listen_address_ = sensor; }
   void set_rf_rx(binary_sensor::BinarySensor *sensor) { this->rf_rx_ = sensor; }
   void set_radio_ok(binary_sensor::BinarySensor *sensor) { this->radio_ok_ = sensor; }
+  void set_fan_stage_sensor(sensor::Sensor *sensor) { this->fan_stage_sensor_ = sensor; }
+  void set_t1_sensor(sensor::Sensor *sensor) { this->t1_sensor_ = sensor; }
+  void set_t2_sensor(sensor::Sensor *sensor) { this->t2_sensor_ = sensor; }
+  void set_t3_sensor(sensor::Sensor *sensor) { this->t3_sensor_ = sensor; }
+  void set_t4_sensor(sensor::Sensor *sensor) { this->t4_sensor_ = sensor; }
   void set_rx_address(uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b3) {
     this->rx_address_[0] = b0;
     this->rx_address_[1] = b1;
@@ -53,6 +59,7 @@ class Nrf905Pluggit : public Component,
   float get_setup_priority() const override { return setup_priority::DATA; }
 
   void transmit_hex(const std::string &hex);
+  void request_sensors();
   void start_sniff();
   void set_address_hex(const std::string &hex);
   void transmit_test(const std::string &message);
@@ -78,6 +85,10 @@ class Nrf905Pluggit : public Component,
   void save_address_();
   void load_address_();
   void publish_packet_(const uint8_t *buf, size_t len);
+  void transmit_bytes_(const uint8_t *buf);
+  void decode_pluggit_frame_(const uint8_t *buf);
+  void publish_fan_stage_(uint8_t stage);
+  void publish_temperature_(sensor::Sensor *sens, uint8_t celsius, const char *name);
   void log_heartbeat_();
   static std::string to_hex_(const uint8_t *data, size_t len);
   static size_t parse_hex_(const std::string &hex, uint8_t *out, size_t max_len);
@@ -92,7 +103,17 @@ class Nrf905Pluggit : public Component,
   text_sensor::TextSensor *listen_address_{nullptr};
   binary_sensor::BinarySensor *rf_rx_{nullptr};
   binary_sensor::BinarySensor *radio_ok_{nullptr};
+  sensor::Sensor *fan_stage_sensor_{nullptr};
+  sensor::Sensor *t1_sensor_{nullptr};
+  sensor::Sensor *t2_sensor_{nullptr};
+  sensor::Sensor *t3_sensor_{nullptr};
+  sensor::Sensor *t4_sensor_{nullptr};
   std::vector<Trigger<std::string> *> on_packet_;
+
+  // Which register block the next 80 90 FC03 answer belongs to.
+  enum class ExpectBlock : uint16_t { NONE = 0, BLOCK_0400 = 0x0400, OTHER = 0xFFFF };
+  ExpectBlock expect_block_{ExpectBlock::NONE};
+  uint32_t expect_at_ms_{0};
 
   bool sniff_mode_{false};
   bool test_mode_{false};
@@ -156,6 +177,15 @@ template<typename... Ts> class Nrf905TestListenAction : public Action<Ts...> {
   explicit Nrf905TestListenAction(Nrf905Pluggit *parent) : parent_(parent) {}
   TEMPLATABLE_VALUE(std::string, data)
   void play(const Ts &...x) override { this->parent_->test_listen(this->data_.value(x...)); }
+
+ protected:
+  Nrf905Pluggit *parent_;
+};
+
+template<typename... Ts> class Nrf905RequestSensorsAction : public Action<Ts...> {
+ public:
+  explicit Nrf905RequestSensorsAction(Nrf905Pluggit *parent) : parent_(parent) {}
+  void play(const Ts &...x) override { this->parent_->request_sensors(); }
 
  protected:
   Nrf905Pluggit *parent_;

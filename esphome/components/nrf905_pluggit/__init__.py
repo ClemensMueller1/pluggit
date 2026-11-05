@@ -2,13 +2,20 @@
 
 from esphome import automation, pins
 import esphome.codegen as cg
-from esphome.components import binary_sensor, spi, text_sensor
+from esphome.components import binary_sensor, sensor, spi, text_sensor
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, CONF_TRIGGER_ID, DEVICE_CLASS_CONNECTIVITY
+from esphome.const import (
+    CONF_ID,
+    CONF_TRIGGER_ID,
+    DEVICE_CLASS_CONNECTIVITY,
+    DEVICE_CLASS_TEMPERATURE,
+    STATE_CLASS_MEASUREMENT,
+    UNIT_CELSIUS,
+)
 
 CODEOWNERS = ["@ClemensMueller1"]
 DEPENDENCIES = ["spi"]
-AUTO_LOAD = ["text_sensor", "binary_sensor"]
+AUTO_LOAD = ["text_sensor", "binary_sensor", "sensor"]
 
 CONF_CE_PIN = "ce_pin"
 CONF_TXE_PIN = "txe_pin"
@@ -23,6 +30,11 @@ CONF_RADIO_OK = "radio_ok"
 CONF_ON_PACKET = "on_packet"
 CONF_DATA = "data"
 CONF_RX_ADDRESS = "rx_address"
+CONF_FAN_STAGE = "fan_stage"
+CONF_T1 = "t1"
+CONF_T2 = "t2"
+CONF_T3 = "t3"
+CONF_T4 = "t4"
 
 nrf905_pluggit_ns = cg.esphome_ns.namespace("nrf905_pluggit")
 Nrf905Pluggit = nrf905_pluggit_ns.class_("Nrf905Pluggit", cg.Component, spi.SPIDevice)
@@ -41,6 +53,9 @@ Nrf905TransmitTestAction = nrf905_pluggit_ns.class_(
 )
 Nrf905TestListenAction = nrf905_pluggit_ns.class_(
     "Nrf905TestListenAction", automation.Action
+)
+Nrf905RequestSensorsAction = nrf905_pluggit_ns.class_(
+    "Nrf905RequestSensorsAction", automation.Action
 )
 
 CONFIG_SCHEMA = (
@@ -67,6 +82,34 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_RADIO_OK): binary_sensor.binary_sensor_schema(
                 device_class=DEVICE_CLASS_CONNECTIVITY,
+            ),
+            cv.Optional(CONF_FAN_STAGE): sensor.sensor_schema(
+                accuracy_decimals=0,
+                icon="mdi:fan",
+            ),
+            cv.Optional(CONF_T1): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_T2): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_T3): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                state_class=STATE_CLASS_MEASUREMENT,
+            ),
+            cv.Optional(CONF_T4): sensor.sensor_schema(
+                unit_of_measurement=UNIT_CELSIUS,
+                accuracy_decimals=0,
+                device_class=DEVICE_CLASS_TEMPERATURE,
+                state_class=STATE_CLASS_MEASUREMENT,
             ),
             cv.Optional(CONF_ON_PACKET): automation.validate_automation(
                 {
@@ -114,6 +157,17 @@ async def to_code(config):
     if CONF_RADIO_OK in config:
         bin_sens = await binary_sensor.new_binary_sensor(config[CONF_RADIO_OK])
         cg.add(var.set_radio_ok(bin_sens))
+
+    for key, setter in (
+        (CONF_FAN_STAGE, var.set_fan_stage_sensor),
+        (CONF_T1, var.set_t1_sensor),
+        (CONF_T2, var.set_t2_sensor),
+        (CONF_T3, var.set_t3_sensor),
+        (CONF_T4, var.set_t4_sensor),
+    ):
+        if key in config:
+            sens = await sensor.new_sensor(config[key])
+            cg.add(setter(sens))
 
     for conf in config.get(CONF_ON_PACKET, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID])
@@ -206,3 +260,14 @@ async def nrf905_test_listen_to_code(config, action_id, template_arg, args):
     template_ = await cg.templatable(config[CONF_DATA], args, cg.std_string)
     cg.add(var.set_data(template_))
     return var
+
+
+@automation.register_action(
+    "nrf905_pluggit.request_sensors",
+    Nrf905RequestSensorsAction,
+    cv.Schema({cv.GenerateID(): cv.use_id(Nrf905Pluggit)}),
+    synchronous=True,
+)
+async def nrf905_request_sensors_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    return cg.new_Pvariable(action_id, template_arg, paren)

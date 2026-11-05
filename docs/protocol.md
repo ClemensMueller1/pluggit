@@ -38,6 +38,36 @@ KWL: 80900318 02100815 0C0A7A00 00000000 00041610 07101207 504C0000 FFFFFFFF
 muss an die bestehende Platine angelernt werden (Handbuch:
 „zusätzliche Fernbedienung“).
 
+## Lüfterstufe und T1–T4 im Funkrahmen
+
+Die FB liest nach dem Aufwachen Holding Register ab `0x0400`
+(12 Register, im Payload byteweise). Die fünf Werte stehen nur in der
+Antwort der Anlage, und nur wenn die vorige Abfrage `0x0400` war.
+`0x040C` hat denselben Kopf `80 90 03 18`, enthält aber andere Register
+(Vorheizregister, Kalibrierung) und wird verworfen.
+
+```
+FB : 90 80 03 04 00 00 0C …          FC03, Start 0x0400, 12 Register
+KWL: 80 90 03 18 SS …… AA AA …… T1 T2 T3 T4 ……
+```
+
+| Offset | Bedeutung |
+|---|---|
+| 4 | Lüfterstufe `SS` (0–3) |
+| 9–10 | `AA AA`, die letzten zwei Bytes der ShockBurst-Adresse |
+| 20 | T1 Außenluft, °C |
+| 21 | T2 Zuluft, °C |
+| 22 | T3 Abluft, °C |
+| 23 | T4 Fortluft, °C |
+
+Beispiel aus dem Mitschnitt: Stufe 1, Adresse `2B 9F`, 10 / 19 / 20 / 11 °C.
+Ein Schreibrahmen `90 80 10 00 00 00 01 02 00 SS` setzt die Stufe sofort;
+Temperaturen kommen erst mit der nächsten Leseantwort.
+
+Der ESP sendet die mitgeschnittene `0x0400`-Abfrage etwa 15 s nach dem
+Start und danach alle 10 Minuten, zusätzlich zu dem, was die FB selbst
+sendet. Die Werte gehen retained auf `speed`, `t1`, `t2`, `t3`, `t4`.
+
 ## UART Funkmodul ↔ Hauptplatine
 
 - 4800 Baud, 8N1, 3,3 V
@@ -74,4 +104,5 @@ für Home Assistant.
 - Standby Stufe 0 (nur über die FB; Analog 0 V gibt die Kontrolle
   an die FB zurück, schaltet aber nicht zwingend auf 0)
 
-Für diese Daten: UART-Weiche oder Funk-Replay nach Sniff.
+Für diese Daten: UART-Weiche, oder über Funk Lüfterstufe und T1–T4
+aus der Antwort auf Register `0x0400`.

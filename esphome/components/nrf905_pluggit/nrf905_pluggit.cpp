@@ -10,6 +10,20 @@ namespace nrf905_pluggit {
 
 static const char *const TAG = "nrf905_pluggit";
 
+// Answer must follow the 0x0400 request within this window.
+static const uint32_t SENSOR_BLOCK_WINDOW_MS = 1500;
+
+// Remote read of holding registers 0x0400, 12 registers. The unit answered this
+// exact frame. Bytes after 00 0C change between remote sessions and are not decoded.
+// Reply layout of 80 90 03 18 (byte offsets in the 32-byte payload):
+//   4 stage, 9..10 ShockBurst address low bytes, 20 T1, 21 T2, 22 T3, 23 T4, °C.
+//   80 90 03 18 01 .. 2B 9F .. 0A 13 14 0B .. → stage 1, 10/19/20/11 °C
+//   80 90 03 18 02 .. 2B 9F .. 0A 13 14 0B .. → stage 2, same temperatures
+//   forum 80 90 03 18 02 .. 0A 7A .. 07 10 12 07 .. → 7/16/18/7 °C
+static const uint8_t SENSOR_QUERY[NRF_PAYLOAD_LEN] = {
+    0x90, 0x80, 0x03, 0x04, 0x00, 0x00, 0x0C, 0x02, 0x00, 0x01, 0xCF, 0x5C, 0xFE, 0x13, 0xF7, 0xFE,
+    0x7F, 0x7C, 0xDF, 0x0C, 0xF9, 0x7A, 0xFE, 0xBC, 0x7B, 0xAB, 0xFF, 0xC1, 0xFF, 0xB9, 0x93, 0xFD};
+
 void Nrf905Pluggit::setup() {
   this->ce_pin_->setup();
   this->txe_pin_->setup();
@@ -412,6 +426,7 @@ void Nrf905Pluggit::publish_packet_(const uint8_t *buf, size_t len) {
     this->rf_rx_->publish_state(true);
   for (auto *trigger : this->on_packet_)
     trigger->trigger(hex);
+  this->decode_pluggit_frame_(buf);
 }
 
 void Nrf905Pluggit::start_sniff() {
@@ -469,17 +484,7 @@ void Nrf905Pluggit::set_address_hex(const std::string &hex) {
     this->listen_address_->publish_state(pretty);
 }
 
-void Nrf905Pluggit::transmit_hex(const std::string &hex) {
-  if (this->test_mode_)
-    this->leave_test_();
-  uint8_t buf[NRF_PAYLOAD_LEN] = {0};
-  this->parse_hex_(hex, buf, NRF_PAYLOAD_LEN);
-
-  if (!this->has_address_()) {
-    ESP_LOGW(TAG, "TX skipped: no ShockBurst address — press RF Adresse neu lernen");
-    return;
-  }
-
+void Nrf905Pluggit::transmit_bytes_(const uint8_t *buf) {
   const bool resume_sniff = this->sniff_mode_;
   this->enter_standby_();
   this->enable();
@@ -497,6 +502,105 @@ void Nrf905Pluggit::transmit_hex(const std::string &hex) {
   }
   this->enter_rx_();
   ESP_LOGI(TAG, "TX %s", this->to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
+}
+
+void Nrf905Pluggit::transmit_hex(const std::string &hex) {
+  if (this->test_mode_)
+    this->leave_test_();
+  uint8_t buf[NRF_PAYLOAD_LEN] = {0};
+  this->parse_hex_(hex, buf, NRF_PAYLOAD_LEN);
+
+  if (!this->has_address_()) {
+    ESP_LOGW(TAG, "TX skipped: no ShockBurst address — press RF Adresse neu lernen");
+    return;
+  }
+  this->transmit_bytes_(buf);
+}
+
+void Nrf905Pluggit::request_sensors() {
+  if (this->is_failed()) {
+    ESP_LOGW(TAG, "Sensor poll skipped: nRF905 setup failed");
+    return;
+  }
+  if (this->sniff_mode_ || this->test_mode_) {
+    ESP_LOGW(TAG, "Sensor poll skipped: sniff or link test is active");
+    return;
+  }
+  if (!this->has_address_()) {
+    ESP_LOGW(TAG, "Sensor poll skipped: no ShockBurst address — press RF Adresse neu lernen");
+    return;
+  }
+  // Our own TX is not received, so arm the 0x0400 window before the frame goes out.
+  this->expect_block_ = ExpectBlock::BLOCK_0400;
+  this->expect_at_ms_ = millis();
+  this->transmit_bytes_(SENSOR_QUERY);
+}
+
+void Nrf905Pluggit::publish_fan_stage_(uint8_t stage) {
+  if (this->fan_stage_sensor_ != nullptr)
+    this->fan_stage_sensor_->publish_state(stage);
+}
+
+void Nrf905Pluggit::publish_temperature_(sensor::Sensor *sens, uint8_t celsius, const char *name) {
+  if (celsius > 80) {
+    ESP_LOGW(TAG, "%s %u C ignored", name, celsius);
+    return;
+  }
+  if (sens != nullptr)
+    sens->publish_state(celsius);
+}
+
+void Nrf905Pluggit::decode_pluggit_frame_(const uint8_t *buf) {
+  if (this->test_mode_ || this->sniff_mode_)
+    return;
+
+  if (buf[0] == 0x90 && buf[1] == 0x80) {
+    const uint8_t fc = buf[2];
+    const uint16_t reg = (static_cast<uint16_t>(buf[3]) << 8) | buf[4];
+    const uint16_t count = (static_cast<uint16_t>(buf[5]) << 8) | buf[6];
+    if (fc == 0x03) {
+      this->expect_block_ = (reg == 0x0400 && count == 0x000C) ? ExpectBlock::BLOCK_0400 : ExpectBlock::OTHER;
+      this->expect_at_ms_ = millis();
+      return;
+    }
+    // 90 80 10 00 00 00 01 02 00 SS — write fan stage, low byte only.
+    if (fc == 0x10 && reg == 0x0000 && count == 0x0001 && buf[7] == 0x02 && buf[8] == 0x00 && buf[9] <= 3) {
+      this->publish_fan_stage_(buf[9]);
+      ESP_LOGI(TAG, "Fan stage %u from 90 80 write", buf[9]);
+    }
+    return;
+  }
+
+  if (buf[0] != 0x80 || buf[1] != 0x90 || buf[2] != 0x03)
+    return;
+
+  const bool sensor_block = this->expect_block_ == ExpectBlock::BLOCK_0400 && buf[3] == 0x18 &&
+                            (millis() - this->expect_at_ms_) < SENSOR_BLOCK_WINDOW_MS;
+  // Any FC03 answer consumes the pending request, including 0x040C.
+  this->expect_block_ = ExpectBlock::NONE;
+  if (!sensor_block)
+    return;
+
+  if (!this->has_address_() || buf[9] != this->rx_address_[2] || buf[10] != this->rx_address_[3]) {
+    ESP_LOGW(TAG, "Sensor block ignored: payload address %02X %02X != %s", buf[9], buf[10],
+             this->has_address_() ? to_hex_(this->rx_address_ + 2, 2).c_str() : "unset");
+    return;
+  }
+
+  const uint8_t stage = buf[4];
+  const uint8_t t1 = buf[20];
+  const uint8_t t2 = buf[21];
+  const uint8_t t3 = buf[22];
+  const uint8_t t4 = buf[23];
+  ESP_LOGI(TAG, "Sensors stage=%u T1=%u T2=%u T3=%u T4=%u", stage, t1, t2, t3, t4);
+  if (stage <= 3)
+    this->publish_fan_stage_(stage);
+  else
+    ESP_LOGW(TAG, "Fan stage %u ignored", stage);
+  this->publish_temperature_(this->t1_sensor_, t1, "T1");
+  this->publish_temperature_(this->t2_sensor_, t2, "T2");
+  this->publish_temperature_(this->t3_sensor_, t3, "T3");
+  this->publish_temperature_(this->t4_sensor_, t4, "T4");
 }
 
 void Nrf905Pluggit::test_listen(const std::string &command) {
