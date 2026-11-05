@@ -9,11 +9,13 @@
 # Lüfterstufe und T1–T4 stehen in der Anlagen-Antwort 80 90 auf die
 # Abfrage 90 80 03 04 00 (Register 0x0400). Der ESP sendet diese Abfrage
 # 15 s nach dem Start und dann alle 10 min. MQTT: speed, t1, t2, t3, t4.
-# Sniff nur über den Button „RF Adresse neu lernen“: CRC aus, TX- und
-# RX-Adresslänge 0. Der Chip sendet die Adresse LSB zuerst, 00 00 2B 9F
-# also als 9F 2B 00 00; ein Match auf 00 trifft das erste Byte nicht.
-# Lehnt der Chip die Länge 0 ab (Readback von Byte 2 ungleich 00), endet
-# der Sniff sofort. Sonst geht einmal das Link-Test-Muster raus, danach
+# Sniff nur über den Button „RF Adresse neu lernen“: CRC aus,
+# TX-Adresslänge 4, RX-Adresslänge 0 (Config-Byte 2 = 0x40). Breite 0
+# als TX-Länge sendet dieses Modul die TX-Adresse 16-mal (64 Byte) vor
+# die Nutzdaten. Der Chip sendet die Adresse LSB zuerst, 11 22 33 44
+# also als 44 33 22 11. Lehnt der Chip Byte 2 ungleich 0x40 ab, endet
+# der Sniff sofort. Sonst geht einmal das Link-Test-Muster mit der
+# schon gesetzten Adresse raus (eine Adresse, dann 32 Byte Text), danach
 # jeder Empfang als SNIFF RX. Steht 80 90 03 18 im Puffer, loggt der ESP
 # „SNIFF device address 00 00 xx xx“ (Address 05/06). Der Sniff endet
 # erst, wenn die ShockBurst-Adresse in HA gesetzt wird; HA sendet sie
@@ -67,7 +69,7 @@ esphome:
   comment: nRF905 868.4 MHz sniff, replay and sensor poll
   project:
     name: pluggit.avent_p_rf
-    version: "1.7.2-868"
+    version: "1.7.3-868"
   on_boot:
     - priority: -100
       then:

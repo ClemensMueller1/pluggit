@@ -84,7 +84,7 @@ void Nrf905Pluggit::dump_config() {
     LOG_PIN("  CD Pin: ", this->cd_pin_);
   if (this->am_pin_ != nullptr)
     LOG_PIN("  AM Pin: ", this->am_pin_);
-  ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, address width 0)" : "replay CRC-16");
+  ESP_LOGCONFIG(TAG, "  Mode: %s", this->sniff_mode_ ? "sniff (CRC off, TX address width 4, RX address width 0)" : "replay CRC-16");
   ESP_LOGCONFIG(TAG, "  NVM address: %s",
                 this->nvm_valid_ ? to_hex_(this->nvm_address_, 4).c_str() : "unset");
   ESP_LOGCONFIG(TAG, "  Address: %s",
@@ -111,14 +111,17 @@ void Nrf905Pluggit::write_config_() {
   //   f = (422.4 + 11.8) * 2 = 868.4 MHz.
   //   Byte 1 0x0E = PA_PWR=+10 dBm, HFREQ_PLL=1, CH_NO[8]=0.
   // Replay: 0x44 = TX/RX address width 4, CRC-16.
-  // Sniff: 0x00 = TX and RX address width 0. The chip sends an address LSB
-  // first, so 00 00 2B 9F is on air as 9F 2B 00 00 and a 1-byte match on 00
-  // never hits. CRC off. Width 0 is outside the documented 1- and 4-byte
-  // encodings; start_sniff() rejects the mode unless byte 2 reads back 0x00.
+  // Sniff: 0x40 = TX address width 4, RX address width 0, CRC off.
+  // The chip sends an address LSB first, so 11 22 33 44 is on air as
+  // 44 33 22 11. Width 0 is stored by the config register but this module
+  // then clocks the 4-byte TX address out 16 times (64 bytes) before the
+  // payload. TX stays at the documented width 4; RX stays 0 so the sender
+  // address is not stripped. start_sniff() rejects the mode unless byte 2
+  // reads back 0x40.
   uint8_t cfg[10] = {
       0x76,
       0x0E,
-      static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : 0x44),
+      static_cast<uint8_t>(this->sniff_mode_ ? 0x40 : 0x44),
       0x20,
       0x20,
       static_cast<uint8_t>(this->sniff_mode_ ? 0x00 : this->rx_address_[0]),
@@ -306,10 +309,10 @@ void Nrf905Pluggit::stop_sniff_() {
 }
 
 void Nrf905Pluggit::note_sniff_frame_(const uint8_t *buf) {
-  // Address width 0 does not strip the sender's address. Pluggit still sends
-  // four address bytes, LSB first: 00 00 2B 9F is on air as 9F 2B 00 00,
-  // then the payload 80 90 03 18. A frame from another width-0 radio can
-  // start at offset 0.
+  // RX address width 0 does not strip the sender's address. Pluggit still
+  // sends four address bytes, LSB first: 00 00 2B 9F is on air as
+  // 9F 2B 00 00, then the payload 80 90 03 18. A frame with no address
+  // prefix can start at offset 0.
   ESP_LOGI(TAG, "SNIFF RX %s", to_hex_(buf, NRF_PAYLOAD_LEN).c_str());
   for (size_t off = 0; off + 10 < NRF_PAYLOAD_LEN; off++) {
     if (buf[off] != 0x80 || buf[off + 1] != 0x90 || buf[off + 2] != 0x03 || buf[off + 3] != 0x18)
@@ -370,9 +373,10 @@ void Nrf905Pluggit::start_sniff() {
   this->sniff_mode_ = true;
   this->write_config_();
   const bool cfg_ok = this->verify_config_();
-  ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, TX/RX address width 0, CRC off)", to_hex_(this->last_cfg_, 10).c_str());
-  if (!cfg_ok || this->last_cfg_[2] != 0x00) {
-    ESP_LOGE(TAG, "Chip rejected address width 0 (config byte 2 is not 0x00)");
+  ESP_LOGI(TAG, "SNIFF cfg %s (868.4 MHz, TX address width 4, RX address width 0, CRC off)",
+           to_hex_(this->last_cfg_, 10).c_str());
+  if (!cfg_ok || this->last_cfg_[2] != 0x40) {
+    ESP_LOGE(TAG, "Chip rejected sniff address widths (config byte 2 is not 0x40)");
     this->stop_sniff_();
     return;
   }
@@ -601,7 +605,7 @@ void Nrf905Pluggit::log_heartbeat_() {
   if (this->test_mode_) {
     ESP_LOGD(TAG, "TEST listen 868.4 MHz addr 00 00 12 34 CRC-16 DR=%d CD=%d AM=%d", dr, cd, am);
   } else if (this->sniff_mode_) {
-    ESP_LOGD(TAG, "sniff 868.4 MHz CRC off address width 0 DR=%d CD=%d AM=%d", dr, cd, am);
+    ESP_LOGD(TAG, "sniff 868.4 MHz CRC off TX address width 4 RX address width 0 DR=%d CD=%d AM=%d", dr, cd, am);
   } else {
     ESP_LOGD(TAG, "replay 868.4 MHz addr=%s DR=%d CD=%d AM=%d",
              this->has_address_() ? to_hex_(this->rx_address_, 4).c_str() : "unset", dr, cd, am);

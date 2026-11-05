@@ -22,9 +22,12 @@ Die ESPHome-Komponente startet im Replay-Modus (gespeicherte Adresse,
 CRC-16) und loggt `NVM ShockBurst address: …`. Der nRF905 sendet die
 Adressbytes LSB zuerst: `11 22 33 44` geht als `44 33 22 11` auf die
 Luft, `00 00 2B 9F` als `9F 2B 00 00`. Sniff nur über den Button
-„RF Adresse neu lernen“: CRC aus, TX- und RX-Adresslänge 0
-(Config-Byte 2 = `0x00`, Readback muss das bestätigen). Beim Start
-sendet der ESP einmal das Link-Test-Muster. Ein Pluggit-Rahmen kann
+„RF Adresse neu lernen“: CRC aus, TX-Adresslänge 4 und RX-Adresslänge 0
+(Config-Byte 2 = `0x40`, Readback muss das bestätigen). TX-Länge 0
+bleibt im Register stehen, dieses Modul sendet dann aber die
+4-Byte-TX-Adresse 16-mal vor die Nutzdaten. Beim Start sendet der ESP
+einmal das Link-Test-Muster mit der schon gesetzten Adresse, also
+genau eine Adresse und danach 32 Byte Text. Ein Pluggit-Rahmen kann
 im Puffer mit den vier Adressbytes in Luftreihenfolge beginnen und
 danach `80 90 03 18` enthalten. Address 05 und 06 darin sind die
 Geräteadresse (`00 00` plus diese zwei Bytes). Der Sniff loggt sie
